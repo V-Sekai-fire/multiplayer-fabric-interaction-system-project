@@ -235,6 +235,72 @@ theorem source_ahead_of_canvas (u v : Int) :
     centreZ < (uvToSource u v).z := by
   rw [source_z_fixed]; simp [centreZ, frontOffset]
 
+-- ── Ray cast model ───────────────────────────────────────────────────────────
+-- lassodb.gd query loop (simplified):
+--
+--   point_local   = source.affine_inverse() * poi_world_pos
+--   angular_dist  = point_local.angle_to(Vector3(0, 0, -1))
+--   euclid_dist   = point_local.length()
+--   if euclid_dist ≤ poi.size:   -- inside rejection sphere (default 0.3 m)
+--     score = snapping_power / (1 + euclid_dist) / (0.01 + angular_dist)
+--   else:
+--     score = snapping_power / (1 + euclid_dist) / (0.1  + angular_dist)
+--
+-- Unit-sphere geometry:
+--   angle_to(v, w) = arccos(dot(v.normalized(), w.normalized()))
+--   This is the great-circle angle on the unit sphere centred at the source.
+--   Ray direction in source-local space = (0, 0, −1) (Godot FORWARD allocentric).
+--   angular_dist = arccos( −point_local.z / |point_local| )
+--
+-- Source basis in our case:
+--   desktop_mouse_action.gd:  Basis.looking_at(-normal) where normal=(0,0,1)
+--   Basis.looking_at((0,0,-1)) = identity  (−Z is already FORWARD)
+--   ⟹ source_basis = I  (no rotation)
+--   ⟹ source.affine_inverse() = translate by −source_pos
+--   ⟹ point_local = poi_world − source_pos
+--
+-- For source at (x3, centreY+y3, centreZ+frontOffset) and
+--     POI at   (x_p, y_p,        centreZ):
+--   point_local = (x_p − x3,  y_p − centreY − y3,  −frontOffset)
+--   z-component is ALWAYS −frontOffset = −100 000 μm  (constant)
+--
+-- The rejection sphere test (squared, avoids sqrt):
+--   euclid_dist² = dx² + dy² + frontOffset²
+--   within sphere iff  dx² + dy² + frontOffset² ≤ size²   (size = 300 000 μm)
+--   iff  dx² + dy² ≤ 300000² − 100000² = 80 000 000 000 000 (μm²)
+
+-- Source-local POI offset (identity source basis → pure translation)
+def pointLocal (source_x source_y poi_x poi_y : Int) : Int × Int × Int :=
+  (poi_x - source_x, poi_y - source_y, -frontOffset)
+
+/-- z-component of POI in source-local space is always −frontOffset.
+    Regardless of source or POI x/y, the canvas plane sits exactly
+    frontOffset behind the source on the ray axis. -/
+theorem point_local_z_const (sx sy px py : Int) :
+    (pointLocal sx sy px py).2.2 = -frontOffset := by
+  simp [pointLocal]
+
+/-- POI is always in the FORWARD hemisphere of the source ray:
+    z < 0 in source-local space ↔ angle < π/2 from (0,0,−1). -/
+theorem poi_in_forward_hemisphere (sx sy px py : Int) :
+    (pointLocal sx sy px py).2.2 < 0 := by
+  rw [point_local_z_const]; simp [frontOffset]
+
+/-- Perfect alignment: source directly in front of POI.
+    When source x/y equals POI x/y, point_local = (0, 0, −frontOffset).
+    angle_to((0,0,−1)) = arccos(frontOffset/frontOffset) = arccos(1) = 0. -/
+theorem point_local_aligned (px py : Int) :
+    pointLocal px py px py = (0, 0, -frontOffset) := by
+  simp [pointLocal]
+
+/-- Within rejection sphere when perfectly aligned:
+    euclid_dist² = frontOffset² < size² (0.1 m < 0.3 m). -/
+def rejectionSize : Int := 300000  -- 0.3 m in μm
+
+theorem aligned_within_rejection_sphere :
+    frontOffset ^ 2 < rejectionSize ^ 2 := by
+  simp [frontOffset, rejectionSize]
+
 -- Note: general ±halfW bounds for x/y require Int.ediv lemmas (Mathlib).
 -- The concrete Action Button checks below cover the practical case via native_decide.
 
