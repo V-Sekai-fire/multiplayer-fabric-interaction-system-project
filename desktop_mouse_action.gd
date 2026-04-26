@@ -53,8 +53,8 @@ func _get_canvas_world_bounds() -> Array:
 	var c01 := mi.global_transform * Vector3(-hw, 0.0,  hh)
 	var c11 := mi.global_transform * Vector3( hw, 0.0,  hh)
 	var center := (c00 + c11) * 0.5
-	var right  := (c10 - c00)
-	var up_vec := (c01 - c00)
+	var right  := (c10 - c00)   # world +X (left → right)
+	var up_vec := (c00 - c01)   # world +Y (bottom → top); c00=top-left, c01=bottom-left
 	var half_w := right.length()   * 0.5
 	var half_h := up_vec.length()  * 0.5
 	var normal := right.normalized().cross(up_vec.normalized())

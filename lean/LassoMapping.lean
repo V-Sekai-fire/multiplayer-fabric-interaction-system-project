@@ -390,6 +390,29 @@ theorem aligned_within_rejection_sphere :
     frontOffset ^ 2 < rejectionSize ^ 2 := by
   simp [frontOffset, rejectionSize]
 
+-- ── Corner orientation note (verified against desktop_mouse_action.gd) ─────
+-- PlaneMesh corners in GodotWorldSpace for canvas at centreY=1.6m, centreZ=−1.5m:
+--   c00 = mi.global_transform * (−hw, 0, −hh) = (−0.8, 2.05, −1.5)  TOP-LEFT
+--   c10 = mi.global_transform * (+hw, 0, −hh) = (+0.8, 2.05, −1.5)  TOP-RIGHT
+--   c01 = mi.global_transform * (−hw, 0, +hh) = (−0.8, 1.15, −1.5)  BOTTOM-LEFT
+--   c11 = mi.global_transform * (+hw, 0, +hh) = (+0.8, 1.15, −1.5)  BOTTOM-RIGHT
+--
+-- right_vec = c10 − c00 = (1.6,  0, 0)  → world +X ✓
+-- up_vec    = c00 − c01 = (0,  0.9, 0)  → world +Y ✓  (FIX: was c01−c00 = −Y, BUG)
+--
+-- With up_vec = +Y and y3 = (0.5 − uv.y) × halfH × 2:
+--   uv.y=0 (screen top)    → y3 = +halfH → point.y = centreY + halfH  TOP ✓
+--   uv.y=1 (screen bottom) → y3 = −halfH → point.y = centreY − halfH  BOTTOM ✓
+-- This matches uvToSourceWorld: y_world = centreY + (UV_MAX/2 − v_uv) × 2 × halfH / UV_MAX
+
+/-- Y-mapping is correct: screen top (v=0) maps to canvas top (centreY+halfH). -/
+theorem uv_y_top_maps_to_canvas_top :
+    (uvToSourceWorld 0 0).y = centreY + halfH := by native_decide
+
+/-- Y-mapping is correct: screen bottom (v=UV_MAX) maps to canvas bottom (centreY−halfH). -/
+theorem uv_y_bottom_maps_to_canvas_bottom :
+    (uvToSourceWorld 0 UV_MAX).y = centreY - halfH := by native_decide
+
 -- Note: general ±halfW bounds for x/y require Int.ediv lemmas (Mathlib).
 -- The concrete Action Button checks below cover the practical case via native_decide.
 
