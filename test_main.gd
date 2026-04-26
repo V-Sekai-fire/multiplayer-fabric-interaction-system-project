@@ -93,11 +93,19 @@ func _setup_xr(ulid: String = "") -> void:
 		for i in range(ulid.length()):
 			ascii_arr.append(ulid.unicode_at(i))
 		_canvas_hud_mat.set_shader_parameter("ulid_chars", ascii_arr)
-	var hud_rect := ColorRect.new()
-	hud_rect.name = "CanvasHUD"
-	hud_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hud_rect.material = _canvas_hud_mat
-	ui_vp.add_child(hud_rect)
+	# Full-screen triangle: one triangle covering [0,w]×[0,h]
+	# More efficient than a quad (2 triangles) — no diagonal seam
+	var w := float(ui_vp.size.x)
+	var h := float(ui_vp.size.y)
+	var hud_tri := Polygon2D.new()
+	hud_tri.name = "CanvasHUD"
+	hud_tri.polygon = PackedVector2Array([
+		Vector2(0.0,   0.0),
+		Vector2(2.0*w, 0.0),
+		Vector2(0.0,   2.0*h),
+	])
+	hud_tri.material = _canvas_hud_mat
+	ui_vp.add_child(hud_tri)
 	var quad := MeshInstance3D.new()
 	quad.name = "CanvasPlane"
 	var mesh := QuadMesh.new()
