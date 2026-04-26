@@ -6,6 +6,8 @@ var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
 var _canvas_hud_mat: ShaderMaterial
+var _left_ctrl: XRController3D
+var _right_ctrl: XRController3D
 
 func _ready() -> void:
 	Engine.max_fps = 60
@@ -123,6 +125,8 @@ func _setup_xr(ulid: String = "") -> void:
 		ctrl.name = "XRController_" + hand
 		ctrl.tracker = "/" + hand + "_hand/controller"
 		origin.add_child(ctrl)
+		if hand == "left":  _left_ctrl  = ctrl
+		else:               _right_ctrl = ctrl
 
 func _process(delta: float) -> void:
 	_elapsed += delta
@@ -136,3 +140,8 @@ func _process(delta: float) -> void:
 		if _canvas_hud_mat:
 			_canvas_hud_mat.set_shader_parameter("cam_pos", wpos)
 			_canvas_hud_mat.set_shader_parameter("dist_to_canvas", dist)
+			_canvas_hud_mat.set_shader_parameter("time_sec", _elapsed)
+			if _left_ctrl:
+				_canvas_hud_mat.set_shader_parameter("left_ctrl_pos",  _left_ctrl.global_position)
+			if _right_ctrl:
+				_canvas_hud_mat.set_shader_parameter("right_ctrl_pos", _right_ctrl.global_position)
