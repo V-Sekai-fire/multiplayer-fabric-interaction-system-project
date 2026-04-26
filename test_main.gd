@@ -5,6 +5,7 @@ const QUIT_AFTER_SECONDS := 30.0
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
+var _canvas_hud_mat: ShaderMaterial
 
 func _ready() -> void:
 	Engine.max_fps = 60
@@ -82,6 +83,21 @@ func _setup_xr(ulid: String = "") -> void:
 	var ui_xr = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
 	ui_xr.name = "TestInteractionUIXR"
 	ui_vp.add_child(ui_xr)
+
+	# S2H canvas_item overlay on top of test UI inside the canvas plane
+	var hud_shader := load("res://canvas_hud.gdshader") as Shader
+	_canvas_hud_mat = ShaderMaterial.new()
+	_canvas_hud_mat.shader = hud_shader
+	if ulid != "":
+		var ascii_arr := PackedInt32Array()
+		for i in range(ulid.length()):
+			ascii_arr.append(ulid.unicode_at(i))
+		_canvas_hud_mat.set_shader_parameter("ulid_chars", ascii_arr)
+	var hud_rect := ColorRect.new()
+	hud_rect.name = "CanvasHUD"
+	hud_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud_rect.material = _canvas_hud_mat
+	ui_vp.add_child(hud_rect)
 	var quad := MeshInstance3D.new()
 	quad.name = "CanvasPlane"
 	var mesh := QuadMesh.new()
@@ -106,6 +122,9 @@ func _process(delta: float) -> void:
 		get_tree().quit()
 	if _xr_cam and _sky_mat:
 		var wpos := _xr_cam.global_position
+		var dist := wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5)
 		_sky_mat.set_shader_parameter("cam_pos", wpos)
-		_sky_mat.set_shader_parameter("dist_to_canvas",
-			wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5))
+		_sky_mat.set_shader_parameter("dist_to_canvas", dist)
+		if _canvas_hud_mat:
+			_canvas_hud_mat.set_shader_parameter("cam_pos", wpos)
+			_canvas_hud_mat.set_shader_parameter("dist_to_canvas", dist)
