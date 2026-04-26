@@ -43,12 +43,44 @@ func _setup_2d(ui_vp: SubViewport) -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "GUI2D"
 	add_child(layer)
+
+	# InputForwarder: full-rect Control that scales mouse events into ui_vp space
+	# and pushes them in, so the 2D window drives the shared SubViewport.
+	var fwd := _InputForwarder.new()
+	fwd.name = "UIInputForwarder"
+	fwd.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fwd.ui_vp = ui_vp
+	layer.add_child(fwd)
+
 	var tr := TextureRect.new()
 	tr.name = "UITextureRect"
 	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	tr.texture = ui_vp.get_texture()
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE  # let InputForwarder handle mouse
 	layer.add_child(tr)
+
+
+class _InputForwarder extends Control:
+	var ui_vp: SubViewport
+
+	func _gui_input(event: InputEvent) -> void:
+		if ui_vp == null:
+			return
+		if event is InputEventMouse:
+			var vp_size := Vector2(ui_vp.size)
+			var my_size := size
+			# map from TextureRect display coords to SubViewport coords
+			var scale := vp_size / my_size
+			var ev := event.duplicate() as InputEventMouse
+			ev.position = event.position * scale
+			if ev is InputEventMouseMotion:
+				(ev as InputEventMouseMotion).relative = \
+					(event as InputEventMouseMotion).relative * scale
+			ui_vp.push_input(ev)
+		else:
+			ui_vp.push_input(event)
+		accept_event()
 
 func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
 	var xr_interface := XRServer.find_interface("OpenXR")
