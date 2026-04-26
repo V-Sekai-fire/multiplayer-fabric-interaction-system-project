@@ -21,13 +21,15 @@ void sky() {
 	s2h_setScale(ui, 2.0);
 	s2h_setCursor(ui, float2(8.0, 8.0));
 
-	// ULID
+	// ULID — amber #f8c266
+	ui.textColor = float4(0.9736, 0.7619, 0.3981, 1.0);
 	for (int i = 0; i < 26; i++) {
 		s2h_printCharacter(ui, uint(ulid_chars[i]));
 	}
 	s2h_printLF(ui);
 
-	// Head position
+	// Head position — sky blue #6de0f1
+	ui.textColor = float4(0.4281, 0.8769, 0.9463, 1.0);
 	s2h_printTxt(ui, _H, _e, _a, _d, _COLON, _SPACE);
 	s2h_printFloat(ui, cam_pos.x);
 	s2h_printTxt(ui, _SPACE);
@@ -36,7 +38,8 @@ void sky() {
 	s2h_printFloat(ui, cam_pos.z);
 	s2h_printLF(ui);
 
-	// Left controller
+	// Left controller — warm orange #fcaa89
+	ui.textColor = float4(0.9891, 0.6679, 0.5353, 1.0);
 	s2h_printTxt(ui, _L, _COLON, _SPACE);
 	s2h_printFloat(ui, left_ctrl_pos.x);
 	s2h_printTxt(ui, _SPACE);
@@ -45,7 +48,8 @@ void sky() {
 	s2h_printFloat(ui, left_ctrl_pos.z);
 	s2h_printLF(ui);
 
-	// Right controller
+	// Right controller — mint green #76dd77
+	ui.textColor = float4(0.4624, 0.8660, 0.4662, 1.0);
 	s2h_printTxt(ui, _R, _COLON, _SPACE);
 	s2h_printFloat(ui, right_ctrl_pos.x);
 	s2h_printTxt(ui, _SPACE);
@@ -54,16 +58,17 @@ void sky() {
 	s2h_printFloat(ui, right_ctrl_pos.z);
 	s2h_printLF(ui);
 
-	// Distance + progress bar
+	// Distance + progress bar — neutral #e8e8e8 label, ramp on bar
+	ui.textColor = float4(0.9102, 0.9102, 0.9102, 1.0);
 	s2h_printTxt(ui, _D, _COLON, _SPACE);
 	s2h_printFloat(ui, dist_to_canvas);
 	s2h_printTxt(ui, _m, _SPACE);
 	ui.textColor = float4(s2h_colorRampRGB(clamp(1.0 - dist_to_canvas / 3.0, 0.0, 1.0)), 1.0);
 	s2h_progress(ui, 8u, clamp(1.0 - dist_to_canvas / 3.0, 0.0, 1.0));
-	ui.textColor = float4(1.0);
 	s2h_printLF(ui);
 
-	// Elapsed time
+	// Elapsed time — lavender #becbf0
+	ui.textColor = float4(0.7469, 0.7974, 0.9415, 1.0);
 	s2h_printTxt(ui, _t, _COLON, _SPACE);
 	s2h_printFloat(ui, time_sec);
 	s2h_printTxt(ui, _s);
