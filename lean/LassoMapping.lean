@@ -235,39 +235,83 @@ theorem source_ahead_of_canvas (u v : Int) :
     centreZ < (uvToSource u v).z := by
   rw [source_z_fixed]; simp [centreZ, frontOffset]
 
--- ── Ray cast model ───────────────────────────────────────────────────────────
--- lassodb.gd query loop (simplified):
+-- ── lassodb.gd — full behaviour model ───────────────────────────────────────
 --
---   point_local   = source.affine_inverse() * poi_world_pos
---   angular_dist  = point_local.angle_to(Vector3(0, 0, -1))
---   euclid_dist   = point_local.length()
---   if euclid_dist ≤ poi.size:   -- inside rejection sphere (default 0.3 m)
---     score = snapping_power / (1 + euclid_dist) / (0.01 + angular_dist)
---   else:
---     score = snapping_power / (1 + euclid_dist) / (0.1  + angular_dist)
+-- 1. POI position in source-local space (get_origin_transformed_pos):
+--      Canvas3DAnchor extends Node3D — has NO get_aabb() method.
+--      ⟹ aabb.size.is_zero_approx() = true  (uninitialized AABB)
+--      ⟹ ALWAYS takes the simple path:
+--           point_local = source.affine_inverse() * poi.origin.global_position
+--      The AABB branch (closest-box-point ray intersection) is dead code
+--      for all canvas_3d_anchor POIs.
 --
--- Unit-sphere geometry:
+-- 2. Scoring formula (query loop):
+--      angular_dist  = point_local.angle_to(Vector3(0, 0, -1))
+--                    = arccos(−point_local.z / |point_local|)   [unit sphere]
+--      euclid_dist   = |point_local|
+--      inside_sphere = euclid_dist ≤ poi.size   (default poi.size = 0.3 m)
+--      base_score    = poi.snapping_power / (1 + euclid_dist)
+--                      / (0.01 + angular_dist)   if inside_sphere
+--                      / (0.1  + angular_dist)   otherwise
+--      score = base_score × (1 + snap_increase_amount² × snap_max_power_increase)
+--              when next == query.current_snap  (current-snap bonus)
+--
+-- 3. snap_locked hysteresis (early exit):
+--      If current_snap is set AND next == current_snap AND snap_locked = true:
+--        first = current_snap  (immediately, no further scoring)
+--        break  — short-circuits the entire loop.
+--      Purpose: prevents flickering when the user is holding a button —
+--      the locked POI stays selected regardless of angular competition.
+--
+-- 4. min_snap_score threshold:
+--      POIs with score < min_snap_score are skipped (continue).
+--      Default min_snap_score = 0.0 → all positively-scored POIs qualify.
+--
+-- 5. Two-best tracking:
+--      query.out_best_poi  = first  (highest score)
+--      query.out_poi_to_local[first]  = point_local of first
+--      query.out_poi_to_local[second] = point_local of second
+--      Used by calc_top_two_snapping_power for blending between POIs.
+--
+-- 6. override_point_set:
+--      When a button is held, interaction_action.gd sets
+--      query.override_point_set = {current_poi: true}.
+--      The query iterates only over this set instead of all registered POIs,
+--      keeping the grab locked to the control being interacted with.
+--
+-- 7. LassoQuery.set_source:
+--      source = Transform3D(Basis.looking_at(ray_normal), position3D)
+--      For desktop mouse: ray_normal = -canvas_normal = (0,0,-1) = FORWARD
+--      ⟹ Basis.looking_at((0,0,-1)) = I  ⟹ source_basis = identity.
+--      For XR controllers: ray_normal comes from the controller aim pose.
+--
+-- 8. get_position_3d (query result → world space):
+--      world_pos = source * out_poi_to_local[poi]
+--      = source_transform * point_local  (un-does the affine_inverse)
+--
+-- 9. calc_top_redirecting_power (joystick / D-pad navigation):
+--      Spatial Voronoi: given a joystick direction and current POI,
+--      finds the nearest POI in that direction using perpendicular bisector
+--      intersection geometry (line–line intersection in the local XY plane
+--      viewed from the current viewpoint).
+--      This function is NOT used by desktop_mouse_action.gd.
+--      It is only invoked when the XR thumbstick is deflected.
+--
+-- Unit-sphere geometry recap:
 --   angle_to(v, w) = arccos(dot(v.normalized(), w.normalized()))
---   This is the great-circle angle on the unit sphere centred at the source.
---   Ray direction in source-local space = (0, 0, −1) (Godot FORWARD allocentric).
---   angular_dist = arccos( −point_local.z / |point_local| )
+--   Ray direction in source-local space = (0, 0, −1)  (FORWARD allocentric).
+--   angular_dist = arccos(−point_local.z / |point_local|)
 --
--- Source basis in our case:
---   desktop_mouse_action.gd:  Basis.looking_at(-normal) where normal=(0,0,1)
---   Basis.looking_at((0,0,-1)) = identity  (−Z is already FORWARD)
---   ⟹ source_basis = I  (no rotation)
---   ⟹ source.affine_inverse() = translate by −source_pos
---   ⟹ point_local = poi_world − source_pos
+-- Our source (identity basis):
+--   source.affine_inverse() = translate by −source_pos
+--   point_local = poi_world − source_pos
+--              = (x_p − x3,  y_p − centreY − y3,  centreZ − sourceZ)
+--              = (dx,         dy,                   −frontOffset)
+--   z is ALWAYS −frontOffset (constant), so POI is always in forward hemisphere.
 --
--- For source at (x3, centreY+y3, centreZ+frontOffset) and
---     POI at   (x_p, y_p,        centreZ):
---   point_local = (x_p − x3,  y_p − centreY − y3,  −frontOffset)
---   z-component is ALWAYS −frontOffset = −100 000 μm  (constant)
---
--- The rejection sphere test (squared, avoids sqrt):
---   euclid_dist² = dx² + dy² + frontOffset²
---   within sphere iff  dx² + dy² + frontOffset² ≤ size²   (size = 300 000 μm)
---   iff  dx² + dy² ≤ 300000² − 100000² = 80 000 000 000 000 (μm²)
+-- Rejection sphere test (squared, avoids sqrt):
+--   within sphere iff  dx² + dy² + frontOffset² ≤ size²
+--   iff  dx² + dy² ≤ size² − frontOffset²  =  80 000 000 000 000 μm²
 
 -- Source-local POI offset (identity source basis → pure translation)
 def pointLocal (source_x source_y poi_x poi_y : Int) : Int × Int × Int :=
