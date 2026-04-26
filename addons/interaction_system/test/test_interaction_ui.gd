@@ -40,7 +40,7 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.1166, 0.1510, 0.1603, 1.0)  # okhsl H=0.60 S=0.15 L=0.16 #1e2629
+	bg.color = Color(0.2292, 0.2845, 0.2995, 1.0)  # okhsl H=0.60 S=0.15 L=0.30 #3a494c
 	add_child(bg)
 
 	var root := HBoxContainer.new()
