@@ -238,12 +238,47 @@ theorem source_ahead_of_canvas (u v : Int) :
 -- ── lassodb.gd — full behaviour model ───────────────────────────────────────
 --
 -- 1. POI position in source-local space (get_origin_transformed_pos):
---      Canvas3DAnchor extends Node3D — has NO get_aabb() method.
---      ⟹ aabb.size.is_zero_approx() = true  (uninitialized AABB)
---      ⟹ ALWAYS takes the simple path:
---           point_local = source.affine_inverse() * poi.origin.global_position
---      The AABB branch (closest-box-point ray intersection) is dead code
---      for all canvas_3d_anchor POIs.
+--
+--    Simple path  (our case — Canvas3DAnchor extends Node3D, no get_aabb()):
+--      aabb.size.is_zero_approx() = true  ⟹
+--      point_local = source.affine_inverse() * poi.origin.global_position
+--      The POI is treated as a dimensionless point at its anchor centre.
+--
+--    AABB path  (active when origin has get_aabb(), e.g. a MeshInstance3D):
+--      Purpose: find the closest point on the POI's bounding box to the
+--               source ray, so the lasso can snap to the FACE of a large
+--               object rather than always its centre.
+--
+--      Steps:
+--        a. Scale AABB by 1000× to reduce float precision loss on small boxes:
+--             scaled_aabb = AABB(aabb.position × 1000, aabb.size × 1000)
+--
+--        b. Express ray in origin's local space:
+--             ray_origin_local = origin.global_transform.inverse() × source.origin
+--             ray_dir_local    = (source.basis × FORWARD) × origin.global_basis
+--                              = origin.global_basis.T × source_forward_world
+--           (Godot: v × B = Bᵀv for orthonormal B, so this is B⁻¹ × world_dir)
+--
+--        c. Cast ray against scaled_aabb.intersects_ray(ray_origin_local, ray_dir_local):
+--             Returns the first hit point on the box surface in origin-local space,
+--             or null if the ray misses the box.
+--
+--        d. Fallback if ray misses box:
+--             Use the projection of source.origin onto the plane z = source_pos.z
+--             in source-local space, transformed back to origin-local space.
+--
+--        e. Clamp closest_box_point to [aabb.position, aabb.position + aabb.size]
+--             (ensures result stays inside the original un-scaled AABB).
+--
+--        f. Convert closest_box_point back to world space then to source-local:
+--             pos = origin.global_transform × closest_box_point   (world space)
+--             point_local = source.affine_inverse() × pos          (source-local)
+--
+--    When to expect the AABB path:
+--      Any POI whose origin node is a VisualInstance3D subclass (MeshInstance3D,
+--      Label3D, etc.) will have get_aabb() and trigger this path.
+--      Future canvas_3d_anchor variants that add a visual mesh child and expose
+--      get_aabb() would automatically use the surface-snapping behaviour.
 --
 -- 2. Scoring formula (query loop):
 --      angular_dist  = point_local.angle_to(Vector3(0, 0, -1))
