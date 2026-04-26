@@ -120,6 +120,35 @@ func _setup_xr(ulid: String = "") -> void:
 	quad.material_override = mat
 	origin.add_child(quad)
 
+	# Camera-relative canvas plane: S2H HUD always in field of view
+	# Parented to XRCamera3D so it moves with the head
+	var hud_vp := SubViewport.new()
+	hud_vp.name = "HUDViewport"
+	hud_vp.size = Vector2i(640, 360)
+	hud_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	xr_vp.add_child(hud_vp)
+	var hud_tri2 := Polygon2D.new()
+	hud_tri2.name = "CanvasHUDTri"
+	hud_tri2.polygon = PackedVector2Array([
+		Vector2(0.0,   0.0),
+		Vector2(1280.0, 0.0),
+		Vector2(0.0,   720.0),
+	])
+	hud_tri2.material = _canvas_hud_mat
+	hud_vp.add_child(hud_tri2)
+	var hud_plane := MeshInstance3D.new()
+	hud_plane.name = "HUDPlane"
+	var hud_mesh := QuadMesh.new()
+	hud_mesh.size = Vector2(0.5, 0.28)
+	hud_plane.mesh = hud_mesh
+	var hud_mat := StandardMaterial3D.new()
+	hud_mat.albedo_texture = hud_vp.get_texture()
+	hud_mat.flags_unshaded = true
+	hud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hud_plane.material_override = hud_mat
+	hud_plane.position = Vector3(-0.3, -0.18, -0.6)
+	_xr_cam.add_child(hud_plane)
+
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
 		ctrl.name = "XRController_" + hand
