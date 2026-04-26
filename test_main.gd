@@ -46,7 +46,7 @@ func _setup_xr() -> void:
 
 	var cam := XRCamera3D.new()
 	cam.name = "XRCamera3D"
-	cam.position = Vector3(0.0, 1.6, 0.0)
+	cam.position = Vector3.UP * 1.6
 	origin.add_child(cam)
 
 	var ui_vp := SubViewport.new()
@@ -64,7 +64,7 @@ func _setup_xr() -> void:
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2(1.6, 0.9)
 	quad.mesh = mesh
-	quad.position = Vector3(0.0, 1.6, -1.5)
+	quad.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = ui_vp.get_texture()
 	mat.flags_unshaded = true
