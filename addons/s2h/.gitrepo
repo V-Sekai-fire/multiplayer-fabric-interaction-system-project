@@ -6,6 +6,6 @@
 [subrepo]
 	remote = https://github.com/V-Sekai-fire/godot-ShaderToHuman
 	branch = main-with-fixes
-	commit = a980c3ee79fb32d477b5c68ec15a8a7c048fe4a9
-	parent = c91ac8366ead8bb3c2ca61b1dce03d700d9b08db
+	commit = 17d40659e2aeed4c01285c6f5d0f7e4b2ec85fbe
+	parent = d9024da9a5b1a2d7e8f4c3b2a1e0d9c8b7a6f5e4
 	cmdver = 0.1.0
