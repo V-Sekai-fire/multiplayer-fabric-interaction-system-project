@@ -21,6 +21,10 @@ func on_action_added() -> void:
 func on_action_removed() -> void:
 	pass
 
+func on_tracking_lost() -> void:
+	pressed_buttons.clear()
+	query.override_point_set.clear()
+
 func on_button_event(mb: InputEventMouseButton) -> bool:
 	var xform := transform
 	if mb.pressed:

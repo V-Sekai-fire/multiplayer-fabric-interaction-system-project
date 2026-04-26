@@ -24,5 +24,6 @@ func _xr_tracker_pose(pose: XRPose):
 	#interaction_manager.handle_pointer_moved_3d(xform.origin, xform.basis * Vector3(0, 0, -1))
 
 func _xr_pose_lost_tracking(pose: XRPose):
+	fire_tracking_lost()
 	pose.tracking_confidence = XRPose.XR_TRACKING_CONFIDENCE_NONE
 	fire_pose_changed(pose)

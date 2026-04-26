@@ -56,6 +56,11 @@ func _notification(what: int):
 					child_action_set.erase(ba)
 					ba.on_action_removed()
 
+func fire_tracking_lost() -> void:
+	active_buttons.clear()
+	for ba in child_action_set:
+		ba.on_tracking_lost()
+
 func fire_button_event(mb: InputEventMouseButton):
 	# callers must assign some sort of button id as mb.resource_name
 	var key: StringName = mb.resource_name

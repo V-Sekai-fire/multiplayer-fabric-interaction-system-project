@@ -16,6 +16,9 @@ func on_action_removed() -> void:
 func on_button_event(mb: InputEventMouseButton) -> bool:
 	return false
 
+func on_tracking_lost() -> void:
+	pass
+
 func on_pose_changed(pose: XRPose):
 	if pose.tracking_confidence == XRPose.XR_TRACKING_CONFIDENCE_NONE:
 		return
