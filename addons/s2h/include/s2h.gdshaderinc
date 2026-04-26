@@ -203,9 +203,9 @@ struct s2h_Triangle
 #define S2H_DISABLE_EMBEDDED_FONT 1
 
 #ifdef S2H_GLSL
-	const uint g_miniFont[] = { //uint[](
+	const uint g_miniFont[192] = { //uint[](
 #else
-	static const uint g_miniFont[] = {
+	static const uint g_miniFont[192] = {
 #endif
     0x00306c6cu, 0x30003860u, 0x18600000u, 0x00000006u, 
     0x00786c6cu, 0x7cc66c60u, 0x30306630u, 0x0000000cu, 
