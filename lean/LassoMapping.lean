@@ -45,6 +45,33 @@ structure Vec3 where
   z : Int  -- toward viewer (+Z); canvas at z = −1 500 000, source at z = −1 400 000
   deriving Repr, DecidableEq
 
+-- ── Allocentric vs Egocentric direction constants ───────────────────────────
+-- Godot 4 exposes two sets of named direction constants:
+--
+--   ALLOCENTRIC (world-centred, fixed to GodotWorldSpace):
+--     Vector3.FORWARD = (0, 0, −1)  — direction a viewer looks toward
+--     Vector3.BACK    = (0, 0,  1)
+--     Vector3.LEFT    = (−1, 0, 0)
+--     Vector3.RIGHT   = ( 1, 0, 0)
+--     Vector3.UP      = (0,  1, 0)
+--     Vector3.DOWN    = (0, −1, 0)
+--
+--   EGOCENTRIC (model-centred, relative to the object's own facing):
+--     Vector3.MODEL_FRONT  = (0, 0,  1)  — the face of a standard mesh (+Z normal)
+--     Vector3.MODEL_BACK   = (0, 0, −1)
+--     Vector3.MODEL_LEFT   = (−1, 0, 0)
+--     Vector3.MODEL_RIGHT  = ( 1, 0, 0)
+--     Vector3.MODEL_TOP    = (0,  1, 0)
+--     Vector3.MODEL_BOTTOM = (0, −1, 0)
+--
+-- Key distinction for this spec:
+--   The canvas plane's surface normal is MODEL_FRONT = +Z (egocentric).
+--   In GodotWorldSpace (canvas node has identity rotation), this maps to
+--   world +Z = BACK (allocentric). A viewer standing at the XROrigin3D
+--   faces FORWARD (−Z allocentric) to look AT the canvas.
+--   The lasso source pose is placed at canvas_centre + MODEL_FRONT * frontOffset,
+--   i.e. slightly on the viewer's side (higher Z, closer to viewer).
+
 -- ── Godot model space (PlaneMesh local space) ────────────────────────────────
 -- Godot's PlaneMesh is defined in MODEL SPACE (object-local coordinates):
 --   Default orientation: lies flat in the XZ plane, normal = +Y (up).
