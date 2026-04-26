@@ -63,13 +63,6 @@ func _setup_xr(ulid: String = "") -> void:
 	world_env.environment = env
 	xr_vp.add_child(world_env)
 
-	# S2H CompositorEffect: POST_TRANSPARENT overlay with depth buffer access
-	var compositor := Compositor.new()
-	var effect: S2HCompositorEffect = load(
-		"res://addons/s2h/compositor/s2h_compositor_effect.gd").new()
-	compositor.compositor_effects = [effect]
-	xr_vp.compositor = compositor
-
 	var origin := XROrigin3D.new()
 	origin.name = "XROrigin3D"
 	xr_vp.add_child(origin)
@@ -77,6 +70,13 @@ func _setup_xr(ulid: String = "") -> void:
 	_xr_cam = XRCamera3D.new()
 	_xr_cam.name = "XRCamera3D"
 	_xr_cam.position = Vector3.UP * 1.6
+
+	# S2H CompositorEffect: POST_TRANSPARENT overlay — attach to camera
+	var compositor := Compositor.new()
+	var effect: S2HCompositorEffect = load(
+		"res://addons/s2h/compositor/s2h_compositor_effect.gd").new()
+	compositor.compositor_effects = [effect]
+	_xr_cam.compositor = compositor
 	origin.add_child(_xr_cam)
 
 	for hand in ["left", "right"]:
