@@ -129,8 +129,11 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	if _elapsed >= QUIT_AFTER_SECONDS:
 		get_tree().quit()
-	if _hud_mat and _xr_cam:
+	if _xr_cam and _sky_mat:
 		var wpos := _xr_cam.global_position
-		_hud_mat.set_shader_parameter("cam_pos", wpos)
-		_hud_mat.set_shader_parameter("dist_to_canvas",
-			wpos.distance_to(_canvas_world_pos))
+		var dist := wpos.distance_to(_canvas_world_pos)
+		_sky_mat.set_shader_parameter("cam_pos", wpos)
+		_sky_mat.set_shader_parameter("dist_to_canvas", dist)
+		if _hud_mat:
+			_hud_mat.set_shader_parameter("cam_pos", wpos)
+			_hud_mat.set_shader_parameter("dist_to_canvas", dist)
