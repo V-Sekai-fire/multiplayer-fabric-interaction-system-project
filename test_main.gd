@@ -1,7 +1,5 @@
 extends Node
 
-const QUIT_AFTER_SECONDS := 30.0
-
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
@@ -107,8 +105,6 @@ func _setup_xr(ulid: String = "") -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
-	if _elapsed >= QUIT_AFTER_SECONDS:
-		get_tree().quit()
 	if _xr_cam and _sky_mat:
 		var wpos := _xr_cam.global_position
 		var dist := wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5)
