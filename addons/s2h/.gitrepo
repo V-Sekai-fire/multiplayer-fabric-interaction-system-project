@@ -1,0 +1,11 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/celyk/godot-ShaderToHuman
+	branch = main
+	commit = 6bf223d3055898665390016c9eae765bc6af74e6
+	parent = 7301a200fec8336eba023a5de141b762b95b452d
+	cmdver = 0.1.0

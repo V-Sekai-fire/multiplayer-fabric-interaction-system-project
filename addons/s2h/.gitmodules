@@ -1,0 +1,3 @@
+[submodule "dependencies/ShaderToHuman"]
+	path = dependencies/ShaderToHuman
+	url = git@github.com:electronicarts/ShaderToHuman.git
