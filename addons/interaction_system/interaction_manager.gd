@@ -88,10 +88,8 @@ func get_canvas_item_from_poi(poi: LassoPOI) -> CanvasItem:
 	return null
 
 func get_position_on_canvas_plane(sc: canvas_plane_class, poi_position_3d: Vector3) -> Vector2:
-	var center_3d := poi_position_3d * sc.global_transform / (sc.canvas_scale * 0.5)
-	var center := Vector2(center_3d.x, center_3d.y) + Vector2(sc.canvas_size.x, 1.0 - sc.canvas_size.y) * Vector2(sc.canvas_anchor_x, sc.canvas_anchor_y)
-	center = Vector2(0.25 + center.x, 1.25 - center.y)
-	return center
+	# Delegate to canvas_plane's own scale-safe transform method.
+	return sc.global_to_viewport(poi_position_3d)
 
 func handle_pointer_moved_2d(last_canvas_item: CanvasItem, new_canvas_item: CanvasItem, pos_2d: Vector2) -> void:
 	if new_canvas_item != null:

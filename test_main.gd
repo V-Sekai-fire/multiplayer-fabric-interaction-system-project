@@ -82,9 +82,9 @@ func _setup_xr(ulid: String) -> SubViewport:
 	# 1280 * 0.5 * 0.0025 = 1.6 m  /  720 * 0.5 * 0.0025 = 0.9 m
 	var cp: Node3D = load("res://addons/canvas_plane/canvas_plane.gd").new()
 	cp.name = "CanvasPlane"
-	cp.set("canvas_width",  1280.0)
-	cp.set("canvas_height", 720.0)
-	cp.set("canvas_scale",  0.0025)
+	cp.set("canvas_width",        1280.0)
+	cp.set("canvas_height",       720.0)
+	cp.set("canvas_plane_scale",  0.0025)
 	cp.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
 	origin.add_child(cp)
 
@@ -119,6 +119,7 @@ func _setup_xr(ulid: String) -> SubViewport:
 	var dma: Node3D = load("res://desktop_mouse_action.gd").new()
 	dma.name = "DesktopMouseAction"
 	dma.set("interaction_manager", im)
+	dma.set("canvas_plane_node", cp)
 	var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
 	ia.name = "InteractionAction"
 	dma.add_child(ia)
