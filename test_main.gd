@@ -27,6 +27,19 @@ func _setup_xr() -> void:
 	xr_vp.use_xr = true
 	add_child(xr_vp)
 
+	# Debug sky: grid + horizon + X/Z axes via ShaderToHuman s2h_drawSkybox
+	var sky_shader := load("res://debug_sky.gdshader") as Shader
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = sky_shader
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	xr_vp.add_child(world_env)
+
 	var origin := XROrigin3D.new()
 	origin.name = "XROrigin3D"
 	xr_vp.add_child(origin)
