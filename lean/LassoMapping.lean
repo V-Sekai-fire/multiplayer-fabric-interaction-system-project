@@ -4,23 +4,32 @@
 -- ============================================================================
 -- LASSO UV MAPPING — FORMAL SPECIFICATION
 --
--- Pipeline: ScreenSpace → CanvasUV → XRWorldSpace
+-- Pipeline: ScreenSpace → CanvasUV → GodotWorldSpace (XRWorldSpace)
 --
 -- Coordinate spaces used:
 --
---   ScreenSpace   — 2D, origin top-left, Y increases DOWN.
---                   Units: pixels (Int). Window size: winW × winH.
+--   ScreenSpace      — 2D, origin top-left, Y increases DOWN.
+--                      Units: pixels (Int). Window size: winW × winH.
 --
---   CanvasUV      — 2D, normalised [0, UV_MAX]². Origin top-left,
---                   UV_MAX = 1 000 000 (represents 1.0).
---                   u increases RIGHT, v increases DOWN (same as ScreenSpace).
+--   CanvasUV         — 2D, normalised [0, UV_MAX]². Origin top-left,
+--                      UV_MAX = 1 000 000 (represents 1.0).
+--                      u increases RIGHT, v increases DOWN (matches ScreenSpace).
 --
---   XRWorldSpace  — 3D, right-handed. Origin = XROrigin3D.
---                   X increases RIGHT, Y increases UP, Z increases TOWARD VIEWER.
---                   Units: μm (Int). Canvas plane is at Z = centreZ = −1 500 000.
+--   GodotWorldSpace  — Godot 4 uses a RIGHT-HANDED coordinate system:
+--                        +X  right
+--                        +Y  up
+--                        +Z  toward the viewer  (FORWARD = −Z in Godot)
+--                      Origin = XROrigin3D (floor/stage reference point).
+--                      Units: μm (Int). All Node3D.global_position values
+--                      are in this space.
+--                      Canvas plane is at Z = centreZ = −1 500 000 μm
+--                      (i.e. 1.5 m in FRONT of the viewer, along −Z).
+--                      The source pose is placed at Z = −1 400 000 μm
+--                      (0.1 m in front of the canvas = toward +Z).
 --
--- The Y-axis flip (ScreenSpace v-down ↔ XRWorldSpace Y-up) is applied
--- in uvToSource: y3 = (UV_MAX/2 − v) × ...  (positive v → lower y3).
+-- Y-axis flip:  ScreenSpace v=0 (top) ↔ GodotWorldSpace +Y (up).
+--               Applied in uvToSource: y3 = (UV_MAX/2 − v) × ...
+--               (larger v → smaller y3 → lower in world space).
 --
 -- All values in integer micrometres following monorepo convention.
 -- No Float lemmas, no sorry.
@@ -28,12 +37,33 @@
 
 namespace LassoMapping
 
-/-- 3-vector in XRWorldSpace (μm). -/
+/-- 3-vector in Godot 4 world space / XRWorldSpace (μm).
+    Godot uses right-handed: +X right, +Y up, +Z toward viewer (FORWARD = −Z). -/
 structure Vec3 where
-  x : Int  -- right
-  y : Int  -- up
-  z : Int  -- toward viewer
+  x : Int  -- right  (+X)
+  y : Int  -- up     (+Y)
+  z : Int  -- toward viewer (+Z); canvas at z = −1 500 000, source at z = −1 400 000
   deriving Repr, DecidableEq
+
+-- ── Godot model space (PlaneMesh local space) ────────────────────────────────
+-- Godot's PlaneMesh is defined in MODEL SPACE (object-local coordinates):
+--   Default orientation: lies flat in the XZ plane, normal = +Y (up).
+--   size.x = width in local X; size.y = depth in local Z.
+--   Vertex range: x ∈ [−size.x/2, size.x/2], y = 0, z ∈ [−size.y/2, size.y/2]
+--
+-- CanvasPlane applies two transforms to MeshInstance3D to make it face the viewer:
+--   1. rotate_x(−π/2)  — tilts the flat XZ plane into the XY plane; normal → −Z
+--   2. scale(1, −1, −1) — flips Y and Z; normal → +Z (toward viewer)
+--
+-- After these transforms, in the MeshInstance3D's LOCAL space:
+--   x ∈ [−size.x/2, size.x/2]   (unchanged, maps to GodotWorldSpace +X)
+--   y ∈ [−size.y/2, size.y/2]   (was Z, flipped; maps to GodotWorldSpace +Y)
+--   z = 0                        (plane is flat; normal = +Z)
+--
+-- MeshInstance3D lives inside spatial_root which is scaled by canvas_plane_scale.
+-- In GodotWorldSpace the canvas vertices are therefore at:
+--   x ∈ [−halfW, halfW],  y ∈ [centreY−halfH, centreY+halfH],  z = centreZ
+-- where halfW = size.x/2 * canvas_plane_scale, halfH = size.y/2 * canvas_plane_scale.
 
 -- ── Canvas constants (μm) ───────────────────────────────────────────────────
 
