@@ -70,7 +70,7 @@
 --                      (0.1 m in front of the canvas = toward +Z).
 --
 -- Y-axis flip:  ScreenSpace v=0 (top) ↔ GodotWorldSpace +Y (up).
---               Applied in uvToSource: y3 = (UV_MAX/2 − v) × ...
+--               Applied in uvToSourceWorld: y_world = centreY + (UV_MAX/2 − v_uv) × ...
 --               (larger v → smaller y3 → lower in world space).
 --
 -- All values in integer micrometres following monorepo convention.
