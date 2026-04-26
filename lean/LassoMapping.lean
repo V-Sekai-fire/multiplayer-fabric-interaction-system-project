@@ -158,81 +158,84 @@ def UV_MAX : Int := 1000000   -- represents 1.0
 
 -- ── Clamp helper ────────────────────────────────────────────────────────────
 
-def clampUV (u : Int) : Int := max 0 (min UV_MAX u)
+-- Variable naming convention:
+--   _screen  — ScreenSpace pixel coordinates (Int, Y-down)
+--   _uv      — CanvasUV coordinates [0, UV_MAX] (Int, Y-down)
+--   _world   — GodotWorldSpace μm (Int, Y-up)
+--   _local   — SourceLocalSpace μm (Int, origin at source pose)
 
-theorem clampUV_lower (u : Int) : 0 ≤ clampUV u := by
+def clampUV (u_uv : Int) : Int := max 0 (min UV_MAX u_uv)
+
+theorem clampUV_lower (u_uv : Int) : 0 ≤ clampUV u_uv := by
   simp [clampUV]; omega
 
-theorem clampUV_upper (u : Int) : clampUV u ≤ UV_MAX := by
+theorem clampUV_upper (u_uv : Int) : clampUV u_uv ≤ UV_MAX := by
   simp [clampUV, UV_MAX]; omega
 
 -- ── Screen-to-UV mapping ────────────────────────────────────────────────────
 -- Canvas aspect ratio: 16 : 9 (1 280 × 720 pixels).
--- For a pillarbox window  (winW × 9 > winH × 16):
---   content_width = winH × 16 / 9
---   u = (px − black_bar_width) × UV_MAX / content_width
--- For a letterbox window (winW × 9 ≤ winH × 16):
---   u = px × UV_MAX / winW
---   v = (py − black_bar_height) × UV_MAX / content_height
+-- For a pillarbox window  (winW_screen × 9 > winH_screen × 16):
+--   content_width = winH_screen × 16 / 9
+--   u_uv = (px_screen − black_bar_width) × UV_MAX / content_width
+-- For a letterbox window (winW_screen × 9 ≤ winH_screen × 16):
+--   u_uv = px_screen × UV_MAX / winW_screen
+--   v_uv = (py_screen − black_bar_height) × UV_MAX / content_height
 
-def screenToUV (winW winH px py : Int) : Int × Int :=
-  let isWider := winW * 9 > winH * 16
-  let (u, v) :=
+def screenToUV (winW_screen winH_screen px_screen py_screen : Int) : Int × Int :=
+  let isWider := winW_screen * 9 > winH_screen * 16
+  let (u_uv, v_uv) :=
     if isWider then
       -- Pillarbox: black bars left/right
-      -- cw = winH × 16 / 9; offset = (winW − cw) / 2
-      -- Multiply through by 9 to avoid division until the end:
-      -- u × (winH × 16) = (px × 9 − (winW × 9 − winH × 16) / 2) × UV_MAX
-      let num_u := (px * 9 - (winW * 9 - winH * 16) / 2) * UV_MAX
-      let den_u := winH * 16
-      let num_v := py * UV_MAX
-      let den_v := winH
+      let num_u := (px_screen * 9 - (winW_screen * 9 - winH_screen * 16) / 2) * UV_MAX
+      let den_u := winH_screen * 16
+      let num_v := py_screen * UV_MAX
+      let den_v := winH_screen
       (num_u / den_u, num_v / den_v)
     else
       -- Letterbox: black bars top/bottom
-      let num_u := px * UV_MAX
-      let den_u := winW
-      let num_v := (py * 16 - (winH * 16 - winW * 9) / 2) * UV_MAX
-      let den_v := winW * 9
+      let num_u := px_screen * UV_MAX
+      let den_u := winW_screen
+      let num_v := (py_screen * 16 - (winH_screen * 16 - winW_screen * 9) / 2) * UV_MAX
+      let den_v := winW_screen * 9
       (num_u / den_u, num_v / den_v)
-  (clampUV u, clampUV v)
+  (clampUV u_uv, clampUV v_uv)
 
 -- ── UV is always in [0, UV_MAX]² ────────────────────────────────────────────
 
-theorem uv_u_lower (winW winH px py : Int) :
-    0 ≤ (screenToUV winW winH px py).1 :=
+theorem uv_u_lower (winW_screen winH_screen px_screen py_screen : Int) :
+    0 ≤ (screenToUV winW_screen winH_screen px_screen py_screen).1 :=
   clampUV_lower _
 
-theorem uv_u_upper (winW winH px py : Int) :
-    (screenToUV winW winH px py).1 ≤ UV_MAX :=
+theorem uv_u_upper (winW_screen winH_screen px_screen py_screen : Int) :
+    (screenToUV winW_screen winH_screen px_screen py_screen).1 ≤ UV_MAX :=
   clampUV_upper _
 
-theorem uv_v_lower (winW winH px py : Int) :
-    0 ≤ (screenToUV winW winH px py).2 :=
+theorem uv_v_lower (winW_screen winH_screen px_screen py_screen : Int) :
+    0 ≤ (screenToUV winW_screen winH_screen px_screen py_screen).2 :=
   clampUV_lower _
 
-theorem uv_v_upper (winW winH px py : Int) :
-    (screenToUV winW winH px py).2 ≤ UV_MAX :=
+theorem uv_v_upper (winW_screen winH_screen px_screen py_screen : Int) :
+    (screenToUV winW_screen winH_screen px_screen py_screen).2 ≤ UV_MAX :=
   clampUV_upper _
 
--- ── UV to 3D source pose ────────────────────────────────────────────────────
--- x = (u − UV_MAX/2) × 2 × halfW / UV_MAX
--- y = centreY + (UV_MAX/2 − v) × 2 × halfH / UV_MAX   (flip Y: top = high)
--- z = centreZ + frontOffset
+-- ── CanvasUV to GodotWorldSpace source pose ─────────────────────────────────
+-- x_world = (u_uv − UV_MAX/2) × 2 × halfW / UV_MAX
+-- y_world = centreY + (UV_MAX/2 − v_uv) × 2 × halfH / UV_MAX  (Y-flip: v-down → Y-up)
+-- z_world = centreZ + frontOffset                               (in front of canvas)
 
-def uvToSource (u v : Int) : Vec3 :=
-  { x := (u - UV_MAX / 2) * 2 * halfW / UV_MAX
-    y := centreY + (UV_MAX / 2 - v) * 2 * halfH / UV_MAX
+def uvToSourceWorld (u_uv v_uv : Int) : Vec3 :=
+  { x := (u_uv - UV_MAX / 2) * 2 * halfW / UV_MAX
+    y := centreY + (UV_MAX / 2 - v_uv) * 2 * halfH / UV_MAX
     z := centreZ + frontOffset }
 
-/-- Source z is always centreZ + frontOffset = −1 400 000 μm (−1.4 m). -/
-theorem source_z_fixed (u v : Int) :
-    (uvToSource u v).z = centreZ + frontOffset := by
-  simp [uvToSource]
+/-- Source z_world is always centreZ + frontOffset = −1 400 000 μm (−1.4 m). -/
+theorem source_z_fixed (u_uv v_uv : Int) :
+    (uvToSourceWorld u_uv v_uv).z = centreZ + frontOffset := by
+  simp [uvToSourceWorld]
 
-/-- Source is always strictly in front of the canvas. -/
-theorem source_ahead_of_canvas (u v : Int) :
-    centreZ < (uvToSource u v).z := by
+/-- Source is always strictly in front of the canvas in GodotWorldSpace. -/
+theorem source_ahead_of_canvas (u_uv v_uv : Int) :
+    centreZ < (uvToSourceWorld u_uv v_uv).z := by
   rw [source_z_fixed]; simp [centreZ, frontOffset]
 
 -- ── lassodb.gd — full behaviour model ───────────────────────────────────────
@@ -348,29 +351,36 @@ theorem source_ahead_of_canvas (u v : Int) :
 --   within sphere iff  dx² + dy² + frontOffset² ≤ size²
 --   iff  dx² + dy² ≤ size² − frontOffset²  =  80 000 000 000 000 μm²
 
--- Source-local POI offset (identity source basis → pure translation)
-def pointLocal (source_x source_y poi_x poi_y : Int) : Int × Int × Int :=
-  (poi_x - source_x, poi_y - source_y, -frontOffset)
+-- POI position in SourceLocalSpace (identity source basis → pure translation).
+-- Inputs are in GodotWorldSpace (_world); output components are in SourceLocalSpace (_local).
+def poiInSourceLocal
+    (src_x_world src_y_world : Int)  -- source position in GodotWorldSpace
+    (poi_x_world poi_y_world : Int)  -- POI   position in GodotWorldSpace
+    : Int × Int × Int :=             -- (x_local, y_local, z_local) in SourceLocalSpace
+  (poi_x_world - src_x_world,
+   poi_y_world - src_y_world,
+   -frontOffset)                     -- z_local always −frontOffset (canvas is behind source)
 
-/-- z-component of POI in source-local space is always −frontOffset.
-    Regardless of source or POI x/y, the canvas plane sits exactly
-    frontOffset behind the source on the ray axis. -/
-theorem point_local_z_const (sx sy px py : Int) :
-    (pointLocal sx sy px py).2.2 = -frontOffset := by
-  simp [pointLocal]
+/-- z_local of POI in SourceLocalSpace is always −frontOffset.
+    Canvas plane sits exactly frontOffset μm behind the source on the ray axis. -/
+theorem poi_z_local_const
+    (src_x_world src_y_world poi_x_world poi_y_world : Int) :
+    (poiInSourceLocal src_x_world src_y_world poi_x_world poi_y_world).2.2 = -frontOffset := by
+  simp [poiInSourceLocal]
 
-/-- POI is always in the FORWARD hemisphere of the source ray:
-    z < 0 in source-local space ↔ angle < π/2 from (0,0,−1). -/
-theorem poi_in_forward_hemisphere (sx sy px py : Int) :
-    (pointLocal sx sy px py).2.2 < 0 := by
-  rw [point_local_z_const]; simp [frontOffset]
+/-- POI z_local < 0 → always in the FORWARD hemisphere of the source ray
+    (angle_to(0,0,−1) < π/2 ↔ cos > 0 ↔ −z_local > 0). -/
+theorem poi_in_forward_hemisphere
+    (src_x_world src_y_world poi_x_world poi_y_world : Int) :
+    (poiInSourceLocal src_x_world src_y_world poi_x_world poi_y_world).2.2 < 0 := by
+  rw [poi_z_local_const]; simp [frontOffset]
 
-/-- Perfect alignment: source directly in front of POI.
-    When source x/y equals POI x/y, point_local = (0, 0, −frontOffset).
-    angle_to((0,0,−1)) = arccos(frontOffset/frontOffset) = arccos(1) = 0. -/
-theorem point_local_aligned (px py : Int) :
-    pointLocal px py px py = (0, 0, -frontOffset) := by
-  simp [pointLocal]
+/-- Perfect alignment: when source XY equals POI XY in GodotWorldSpace,
+    poiInSourceLocal = (0, 0, −frontOffset) in SourceLocalSpace.
+    angle_to((0,0,−1)) = arccos(1) = 0 → maximum snapping score. -/
+theorem poi_aligned_when_xy_match (xy_world : Int) :
+    poiInSourceLocal xy_world xy_world xy_world xy_world = (0, 0, -frontOffset) := by
+  simp [poiInSourceLocal]
 
 /-- Within rejection sphere when perfectly aligned:
     euclid_dist² = frontOffset² < size² (0.1 m < 0.3 m). -/
@@ -405,21 +415,21 @@ theorem uv_canvas_center :
 
 /-- Centre UV maps to source x = 0 (canvas midline). -/
 theorem source_x_at_center :
-    (uvToSource 500000 500000).x = 0 := by native_decide
+    (uvToSourceWorld 500000 500000).x = 0 := by native_decide
 
 /-- Centre UV maps to source y = centreY (canvas midline). -/
 theorem source_y_at_center :
-    (uvToSource 500000 500000).y = centreY := by native_decide
+    (uvToSourceWorld 500000 500000).y = centreY := by native_decide
 
 /-- Top-left UV maps to source at top-left corner of canvas. -/
 theorem source_at_top_left :
-    (uvToSource 0 0).x = -halfW ∧
-    (uvToSource 0 0).y = centreY + halfH := by native_decide
+    (uvToSourceWorld 0 0).x = -halfW ∧
+    (uvToSourceWorld 0 0).y = centreY + halfH := by native_decide
 
 /-- Bottom-right UV maps to source at bottom-right corner of canvas. -/
 theorem source_at_bottom_right :
-    (uvToSource UV_MAX UV_MAX).x = halfW ∧
-    (uvToSource UV_MAX UV_MAX).y = centreY - halfH := by native_decide
+    (uvToSourceWorld UV_MAX UV_MAX).x = halfW ∧
+    (uvToSourceWorld UV_MAX UV_MAX).y = centreY - halfH := by native_decide
 
 -- ── Edge cases: pillarbox (wider than 16:9, e.g. 2560 × 1080 ultrawide) ─────
 -- 1920×1080 is exactly 16:9; use 2560×1080 for a genuine pillarbox.
@@ -457,21 +467,21 @@ theorem letterbox_bottom_bar_clamps :
 
 /-- Source z for Action Button top-left is −1 400 000 μm. -/
 theorem action_button_source_z :
-    (uvToSource (screenToUV 1280 720 0 28).1 (screenToUV 1280 720 0 28).2).z = -1400000 := by
+    (uvToSourceWorld (screenToUV 1280 720 0 28).1 (screenToUV 1280 720 0 28).2).z = -1400000 := by
   native_decide
 
 /-- Action Button top-left source is within canvas bounds. -/
 theorem action_button_tl_in_bounds :
     let (u, v) := screenToUV 1280 720 0 28
-    (-halfW ≤ (uvToSource u v).x ∧ (uvToSource u v).x ≤ halfW) ∧
-    (centreY - halfH ≤ (uvToSource u v).y ∧ (uvToSource u v).y ≤ centreY + halfH) := by
+    (-halfW ≤ (uvToSourceWorld u v).x ∧ (uvToSourceWorld u v).x ≤ halfW) ∧
+    (centreY - halfH ≤ (uvToSourceWorld u v).y ∧ (uvToSourceWorld u v).y ≤ centreY + halfH) := by
   native_decide
 
 /-- Action Button bottom-right source is within canvas bounds. -/
 theorem action_button_br_in_bounds :
     let (u, v) := screenToUV 1280 720 260 55
-    (-halfW ≤ (uvToSource u v).x ∧ (uvToSource u v).x ≤ halfW) ∧
-    (centreY - halfH ≤ (uvToSource u v).y ∧ (uvToSource u v).y ≤ centreY + halfH) := by
+    (-halfW ≤ (uvToSourceWorld u v).x ∧ (uvToSourceWorld u v).x ≤ halfW) ∧
+    (centreY - halfH ≤ (uvToSourceWorld u v).y ∧ (uvToSourceWorld u v).y ≤ centreY + halfH) := by
   native_decide
 
 -- ── Test UI controls: HSlider ────────────────────────────────────────────────
@@ -480,30 +490,30 @@ theorem action_button_br_in_bounds :
 /-- HSlider region source is within canvas bounds. -/
 theorem slider_in_bounds :
     let (u, v) := screenToUV 1280 720 0 125
-    (-halfW ≤ (uvToSource u v).x ∧ (uvToSource u v).x ≤ halfW) ∧
-    (centreY - halfH ≤ (uvToSource u v).y ∧ (uvToSource u v).y ≤ centreY + halfH) := by
+    (-halfW ≤ (uvToSourceWorld u v).x ∧ (uvToSourceWorld u v).x ≤ halfW) ∧
+    (centreY - halfH ≤ (uvToSourceWorld u v).y ∧ (uvToSourceWorld u v).y ≤ centreY + halfH) := by
   native_decide
 
 -- ── All test UI controls share the same source z ────────────────────────────
 
 /-- Action Button top-left source z = −1 400 000 μm. -/
 theorem ctrl_action_tl_z :
-    (uvToSource (screenToUV 1280 720 0   28).1 (screenToUV 1280 720 0   28).2).z = -1400000 := by
+    (uvToSourceWorld (screenToUV 1280 720 0   28).1 (screenToUV 1280 720 0   28).2).z = -1400000 := by
   native_decide
 
 /-- Action Button bottom-right source z = −1 400 000 μm. -/
 theorem ctrl_action_br_z :
-    (uvToSource (screenToUV 1280 720 260 55).1 (screenToUV 1280 720 260 55).2).z = -1400000 := by
+    (uvToSourceWorld (screenToUV 1280 720 260 55).1 (screenToUV 1280 720 260 55).2).z = -1400000 := by
   native_decide
 
 /-- HSlider source z = −1 400 000 μm. -/
 theorem ctrl_slider_z :
-    (uvToSource (screenToUV 1280 720 0 125).1 (screenToUV 1280 720 0 125).2).z = -1400000 := by
+    (uvToSourceWorld (screenToUV 1280 720 0 125).1 (screenToUV 1280 720 0 125).2).z = -1400000 := by
   native_decide
 
 /-- Status label source z = −1 400 000 μm. -/
 theorem ctrl_status_z :
-    (uvToSource (screenToUV 1280 720 0 150).1 (screenToUV 1280 720 0 150).2).z = -1400000 := by
+    (uvToSourceWorld (screenToUV 1280 720 0 150).1 (screenToUV 1280 720 0 150).2).z = -1400000 := by
   native_decide
 
 end LassoMapping
