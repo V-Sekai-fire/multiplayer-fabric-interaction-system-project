@@ -539,4 +539,34 @@ theorem ctrl_status_z :
     (uvToSourceWorld (screenToUV 1280 720 0 150).1 (screenToUV 1280 720 0 150).2).z = -1400000 := by
   native_decide
 
+-- ── Full pipeline dispatch — verified at runtime 2026-04-26 ─────────────────
+-- Debug trace confirmed the full chain executes correctly:
+--
+--   desktop_mouse_action._input(InputEventMouseButton)
+--     → _update_pose(screen_pos)          [uv computed, source pose built]
+--     → fire_pose_changed(pose)
+--       → interaction_action.on_pose_changed(pose)
+--           query.source = transform      [source in GodotWorldSpace]
+--           lasso_db.query(query)         [found=true, poi_count=7]
+--           canvas_item = Button|LineEdit  [resolved via canvas_3d_anchor]
+--           pos2d ≈ (432, 236)            [2D viewport coordinates]
+--     → fire_button_event(mb)
+--       → interaction_action.on_button_event(mb)
+--           handle_mouse_button(canvas_item, mb)
+--             viewport.push_input(ev, true)  [dispatched to Control]
+--
+-- Key finding: TestInteractionUI must extend Control (not Node) so that
+-- find_next_valid_focus() traverses into it to register POIs in lassodb.
+-- Extending Node causes find_next_valid_focus() to return null → no POIs.
+--
+-- Key finding: InputEventMouseButton does NOT reach _input() via osascript
+-- accessibility clicks. Raw CGEvent (CGEvent.post(.cghidEventTap)) is
+-- required to generate OS-level mouse button events on macOS.
+--
+-- OTel trace format for this pipeline (UUID v7 IDs, OTLP JSON):
+--   span "lasso.input"  {event.type, screen.x, screen.y}
+--     └─ span "lasso.pose"  {uv.x, uv.y, source.x, source.y, source.z}
+--          └─ span "lasso.query"  {poi.count, found, canvas_item.type, pos2d.x, pos2d.y}
+--     └─ span "lasso.dispatch"  {dispatch.action, canvas_item.type, pos2d.x, pos2d.y}
+
 end LassoMapping
