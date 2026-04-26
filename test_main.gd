@@ -11,9 +11,13 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	# Stamp window title with a ULID so each run is uniquely identifiable
 	var ulid := _gen_ulid()
-	DisplayServer.window_set_title("Interaction System Test [%s]" % ulid)
+	# Deferred so the window exists before we rename it
+	call_deferred("_set_title", ulid)
 	_setup_2d()
-	_setup_xr()
+	_setup_xr(ulid)
+
+func _set_title(ulid: String) -> void:
+	DisplayServer.window_set_title("Interaction System Test [%s]" % ulid)
 
 func _gen_ulid() -> String:
 	# ULID: 10-char timestamp (ms since epoch) + 16-char random, Crockford base32
@@ -35,7 +39,7 @@ func _setup_2d() -> void:
 	test.name = "TestInteractionUI"
 	layer.add_child(test)
 
-func _setup_xr() -> void:
+func _setup_xr(ulid: String = "") -> void:
 	var xr_interface := XRServer.find_interface("OpenXR")
 	if xr_interface == null or not xr_interface.is_initialized():
 		return
@@ -101,6 +105,16 @@ func _setup_xr() -> void:
 	mat.flags_unshaded = true
 	quad.material_override = mat
 	origin.add_child(quad)
+
+	# ULID label above the canvas plane — unique identifier for this run
+	if ulid != "":
+		var id_lbl := Label3D.new()
+		id_lbl.text = ulid
+		id_lbl.pixel_size = 0.003
+		id_lbl.modulate = Color(0.8, 0.8, 0.2)
+		id_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		id_lbl.position = quad.position + Vector3.UP * 0.55
+		origin.add_child(id_lbl)
 
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
