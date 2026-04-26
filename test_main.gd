@@ -5,7 +5,6 @@ const QUIT_AFTER_SECONDS := 30.0
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
-var _canvas_hud_mat: ShaderMaterial
 var _left_ctrl: XRController3D
 var _right_ctrl: XRController3D
 
@@ -86,28 +85,6 @@ func _setup_xr(ulid: String = "") -> void:
 	ui_xr.name = "TestInteractionUIXR"
 	ui_vp.add_child(ui_xr)
 
-	# S2H canvas_item overlay on top of test UI inside the canvas plane
-	var hud_shader := load("res://canvas_hud.gdshader") as Shader
-	_canvas_hud_mat = ShaderMaterial.new()
-	_canvas_hud_mat.shader = hud_shader
-	if ulid != "":
-		var ascii_arr := PackedInt32Array()
-		for i in range(ulid.length()):
-			ascii_arr.append(ulid.unicode_at(i))
-		_canvas_hud_mat.set_shader_parameter("ulid_chars", ascii_arr)
-	# Full-screen triangle: one triangle covering [0,w]×[0,h]
-	# More efficient than a quad (2 triangles) — no diagonal seam
-	var w := float(ui_vp.size.x)
-	var h := float(ui_vp.size.y)
-	var hud_tri := Polygon2D.new()
-	hud_tri.name = "CanvasHUD"
-	hud_tri.polygon = PackedVector2Array([
-		Vector2(0.0,   0.0),
-		Vector2(2.0*w, 0.0),
-		Vector2(0.0,   2.0*h),
-	])
-	hud_tri.material = _canvas_hud_mat
-	ui_vp.add_child(hud_tri)
 	var quad := MeshInstance3D.new()
 	quad.name = "CanvasPlane"
 	var mesh := QuadMesh.new()
@@ -119,35 +96,6 @@ func _setup_xr(ulid: String = "") -> void:
 	mat.flags_unshaded = true
 	quad.material_override = mat
 	origin.add_child(quad)
-
-	# Camera-relative canvas plane: S2H HUD always in field of view
-	# Parented to XRCamera3D so it moves with the head
-	var hud_vp := SubViewport.new()
-	hud_vp.name = "HUDViewport"
-	hud_vp.size = Vector2i(640, 360)
-	hud_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	xr_vp.add_child(hud_vp)
-	var hud_tri2 := Polygon2D.new()
-	hud_tri2.name = "CanvasHUDTri"
-	hud_tri2.polygon = PackedVector2Array([
-		Vector2(0.0,   0.0),
-		Vector2(1280.0, 0.0),
-		Vector2(0.0,   720.0),
-	])
-	hud_tri2.material = _canvas_hud_mat
-	hud_vp.add_child(hud_tri2)
-	var hud_plane := MeshInstance3D.new()
-	hud_plane.name = "HUDPlane"
-	var hud_mesh := QuadMesh.new()
-	hud_mesh.size = Vector2(0.5, 0.28)
-	hud_plane.mesh = hud_mesh
-	var hud_mat := StandardMaterial3D.new()
-	hud_mat.albedo_texture = hud_vp.get_texture()
-	hud_mat.flags_unshaded = true
-	hud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	hud_plane.material_override = hud_mat
-	hud_plane.position = Vector3(-0.3, -0.18, -0.6)
-	_xr_cam.add_child(hud_plane)
 
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
@@ -166,11 +114,8 @@ func _process(delta: float) -> void:
 		var dist := wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5)
 		_sky_mat.set_shader_parameter("cam_pos", wpos)
 		_sky_mat.set_shader_parameter("dist_to_canvas", dist)
-		if _canvas_hud_mat:
-			_canvas_hud_mat.set_shader_parameter("cam_pos", wpos)
-			_canvas_hud_mat.set_shader_parameter("dist_to_canvas", dist)
-			_canvas_hud_mat.set_shader_parameter("time_sec", _elapsed)
-			if _left_ctrl:
-				_canvas_hud_mat.set_shader_parameter("left_ctrl_pos",  _left_ctrl.global_position)
-			if _right_ctrl:
-				_canvas_hud_mat.set_shader_parameter("right_ctrl_pos", _right_ctrl.global_position)
+		_sky_mat.set_shader_parameter("time_sec", _elapsed)
+		if _left_ctrl:
+			_sky_mat.set_shader_parameter("left_ctrl_pos",  _left_ctrl.global_position)
+		if _right_ctrl:
+			_sky_mat.set_shader_parameter("right_ctrl_pos", _right_ctrl.global_position)
