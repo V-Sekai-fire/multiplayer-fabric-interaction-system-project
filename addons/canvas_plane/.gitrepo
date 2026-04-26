@@ -4,8 +4,8 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/V-Sekai/interaction_system.git
-	branch = fix/remove-game-specific-names
-	commit = FETCH_HEAD
-	parent = 80730049ff1c6ce20854815f66c1db77899621ad
+	remote = https://github.com/V-Sekai/canvas_plane.git
+	branch = main
+	commit = 4097d874a3e5235f790e832db26d5ea7f134223e
+	parent = c44ec2cac94ff2d328eb9b96ed8e9c80286380ae
 	cmdver = 0.1.0
