@@ -4,8 +4,8 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/celyk/godot-ShaderToHuman
-	branch = main
-	commit = 6bf223d3055898665390016c9eae765bc6af74e6
-	parent = 7301a200fec8336eba023a5de141b762b95b452d
+	remote = https://github.com/V-Sekai-fire/godot-ShaderToHuman
+	branch = main-with-fixes
+	commit = a980c3ee79fb32d477b5c68ec15a8a7c048fe4a9
+	parent = c91ac8366ead8bb3c2ca61b1dce03d700d9b08db
 	cmdver = 0.1.0
