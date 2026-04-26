@@ -58,6 +58,7 @@ func _setup_xr(ulid: String) -> SubViewport:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	xr_vp.add_child(world_env)
