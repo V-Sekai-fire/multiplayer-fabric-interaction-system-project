@@ -7,5 +7,5 @@
 	remote = https://github.com/V-Sekai-fire/multiplayer-fabric-interaction-system.git
 	branch = fix/remove-game-specific-names
 	commit = 3a73b15
-	parent = 80730049ff1c6ce20854815f66c1db77899621ad
+	parent = 65aa0d6
 	cmdver = 0.1.0
