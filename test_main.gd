@@ -7,8 +7,23 @@ var _xr_cam: XRCamera3D
 
 func _ready() -> void:
 	Engine.max_fps = 60
+	# Stamp window title with a ULID so each run is uniquely identifiable
+	var ulid := _gen_ulid()
+	DisplayServer.window_set_title("Interaction System Test [%s]" % ulid)
 	_setup_2d()
 	_setup_xr()
+
+func _gen_ulid() -> String:
+	# ULID: 10-char timestamp (ms since epoch) + 16-char random, Crockford base32
+	const CHARS := "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	var t := int(Time.get_unix_time_from_system() * 1000)
+	var result := ""
+	for i in range(10):
+		result = CHARS[t & 0x1F] + result
+		t >>= 5
+	for i in range(16):
+		result += CHARS[randi() % 32]
+	return result
 
 func _setup_2d() -> void:
 	var layer := CanvasLayer.new()
