@@ -6,6 +6,48 @@
 --
 -- Pipeline: ScreenSpace → CanvasUV → GodotWorldSpace (XRWorldSpace)
 --
+-- ── Godot coordinate space taxonomy ─────────────────────────────────────────
+--
+--   Godot2D (CanvasItem world space)
+--     Origin: top-left of the Viewport.
+--     +X right, +Y DOWN.
+--     Units: pixels (virtual px with CanvasLayer scale).
+--     CanvasItem.global_position, get_global_transform() live here.
+--     Rotations: clockwise = positive angle (because +Y is down).
+--
+--   ControlSpace (Control local space)
+--     Origin: top-left of the Control's own rect.
+--     +X right, +Y DOWN (same orientation as Godot2D).
+--     Control.position is in PARENT's local space.
+--     Control.get_rect() → Rect2 with position=(0,0), size=(w,h).
+--     Control.get_global_rect() → Rect2 in Godot2D world space.
+--     SubViewport: its Controls live in [0..vp_size.x] × [0..vp_size.y].
+--     Rotations: same handedness as Godot2D (clockwise = positive).
+--
+--   Godot3D (GodotWorldSpace, also called XRWorldSpace here)
+--     +X right, +Y UP, +Z toward viewer (right-handed).
+--     Node3D.global_position lives here.
+--     Rotations: RIGHT-HAND RULE about each axis:
+--       Rotate_X(+θ): +Y tilts toward +Z (nodding forward).
+--       Rotate_Y(+θ): +Z tilts toward +X (turning left).
+--       Rotate_Z(+θ): +X tilts toward −Y (rolling clockwise from front).
+--     Euler order: Godot default is YXZ (yaw, then pitch, then roll).
+--     Quaternions follow the same right-hand convention.
+--
+--   Godot2D ↔ Godot3D Y-axis relationship:
+--     Godot2D +Y (down) ↔ Godot3D −Y (down).
+--     canvas_3d_anchor converts a Control at 2D pixel (px, py) to
+--     3D local position:
+--       x3 =  px  × UI_PIXELS_TO_METER         (right in both)
+--       y3 = (1 − py) × UI_PIXELS_TO_METER     (flip: 2D down = 3D down⁻¹)
+--     where UI_PIXELS_TO_METER = 1/1024.
+--
+--   Godot2D ↔ ControlSpace relationship:
+--     A Control at position p in its parent's local space has
+--     global_position = parent_global_transform * p.
+--     For controls inside a SubViewport (no parent transform offset),
+--     ControlSpace ≅ Godot2D (same origin, same axes).
+--
 -- Coordinate spaces used:
 --
 --   ScreenSpace      — 2D, origin top-left, Y increases DOWN.
