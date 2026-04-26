@@ -6,16 +6,20 @@ var _sky_mat: ShaderMaterial
 var _left_ctrl: XRController3D
 var _right_ctrl: XRController3D
 
+
 func _ready() -> void:
 	Engine.max_fps = 60
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
-	var ui_vp := _setup_ui_viewport()
+	var ui_vp := _setup_xr(ulid)
+	if ui_vp == null:
+		ui_vp = _make_fallback_ui_vp()
 	_setup_2d(ui_vp)
-	_setup_xr(ulid, ui_vp)
+
 
 func _set_title(ulid: String) -> void:
 	DisplayServer.window_set_title("Interaction System Test [%s]" % ulid)
+
 
 func _gen_ulid() -> String:
 	const CHARS := "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -28,71 +32,19 @@ func _gen_ulid() -> String:
 		result += CHARS[randi() % 32]
 	return result
 
-func _setup_ui_viewport() -> SubViewport:
-	var ui_vp := SubViewport.new()
-	ui_vp.name = "UIViewport"
-	ui_vp.size = Vector2i(1280, 720)
-	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	add_child(ui_vp)
-	var test = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
-	test.name = "TestInteractionUI"
-	ui_vp.add_child(test)
-	return ui_vp
 
-func _setup_2d(ui_vp: SubViewport) -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "GUI2D"
-	add_child(layer)
-
-	# InputForwarder: full-rect Control that scales mouse events into ui_vp space
-	# and pushes them in, so the 2D window drives the shared SubViewport.
-	var fwd := _InputForwarder.new()
-	fwd.name = "UIInputForwarder"
-	fwd.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fwd.ui_vp = ui_vp
-	layer.add_child(fwd)
-
-	var tr := TextureRect.new()
-	tr.name = "UITextureRect"
-	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	tr.texture = ui_vp.get_texture()
-	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE  # let InputForwarder handle mouse
-	layer.add_child(tr)
-
-
-class _InputForwarder extends Control:
-	var ui_vp: SubViewport
-
-	func _gui_input(event: InputEvent) -> void:
-		if ui_vp == null:
-			return
-		if event is InputEventMouse:
-			var vp_size := Vector2(ui_vp.size)
-			var my_size := size
-			# map from TextureRect display coords to SubViewport coords
-			var scale := vp_size / my_size
-			var ev := event.duplicate() as InputEventMouse
-			ev.position = event.position * scale
-			if ev is InputEventMouseMotion:
-				(ev as InputEventMouseMotion).relative = \
-					(event as InputEventMouseMotion).relative * scale
-			ui_vp.push_input(ev)
-		else:
-			ui_vp.push_input(event)
-		accept_event()
-
-func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
+# Returns the SubViewport that owns TestInteractionUI, or null if XR not available.
+func _setup_xr(ulid: String) -> SubViewport:
 	var xr_interface := XRServer.find_interface("OpenXR")
 	if xr_interface == null or not xr_interface.is_initialized():
-		return
+		return null
 
 	var xr_vp := SubViewport.new()
 	xr_vp.name = "XRViewport"
 	xr_vp.use_xr = true
 	add_child(xr_vp)
 
-	# S2H debug sky: world grid + ULID + position text via GLSL preprocessor
+	# S2H debug sky
 	var sky_shader := load("res://debug_sky.gdshader") as Shader
 	_sky_mat = ShaderMaterial.new()
 	_sky_mat.shader = sky_shader
@@ -110,6 +62,11 @@ func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
 	world_env.environment = env
 	xr_vp.add_child(world_env)
 
+	# InteractionManager — must be in viewport before XRControllerInteractionHelper
+	var im: Node = load("res://addons/interaction_system/interaction_manager.gd").new()
+	im.name = "InteractionManager"
+	xr_vp.add_child(im)
+
 	var origin := XROrigin3D.new()
 	origin.name = "XROrigin3D"
 	xr_vp.add_child(origin)
@@ -119,19 +76,38 @@ func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
 	_xr_cam.position = Vector3.UP * 1.6
 	origin.add_child(_xr_cam)
 
-	# Canvas plane: shared UIViewport texture on a quad in XR space
-	# Same SubViewport shown in both the 2D window and XR — single source of truth
-	var quad := MeshInstance3D.new()
-	quad.name = "CanvasPlane"
-	var mesh := QuadMesh.new()
-	mesh.size = Vector2(1.6, 0.9)
-	quad.mesh = mesh
-	quad.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = ui_vp.get_texture()
-	mat.flags_unshaded = true
-	quad.material_override = mat
-	origin.add_child(quad)
+	# CanvasPlane: owns SubViewport + ControlRoot + 3D mesh
+	# canvas_scale: physical_width = canvas_width * 0.5 * canvas_scale
+	# 1280 * 0.5 * 0.0025 = 1.6 m  /  720 * 0.5 * 0.0025 = 0.9 m
+	var cp: Node3D = load("res://addons/canvas_plane/canvas_plane.gd").new()
+	cp.name = "CanvasPlane"
+	cp.set("canvas_width",  1280.0)
+	cp.set("canvas_height", 720.0)
+	cp.set("canvas_scale",  0.0025)
+	cp.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
+	origin.add_child(cp)  # triggers cp._ready() → SubViewport + ControlRoot created
+
+	# Single TestInteractionUI lives inside the CanvasPlane
+	var test_ui: Node = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
+	test_ui.name = "TestInteractionUI"
+	cp.call("get_control_root").add_child(test_ui)
+
+	# Register canvas deferred so test_ui._ready() has run first
+	im.call_deferred("register_canvas", cp)
+
+	# XRControllerInteractionHelper: spawns XRActionHost+interaction_action per tracker
+	var host_proto: Node3D = load("res://addons/interaction_system/xr_action_host.gd").new()
+	host_proto.name = "XRActionHost"
+	var ia: Node = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
+	ia.name = "InteractionAction"
+	host_proto.add_child(ia)
+	var packed := PackedScene.new()
+	packed.pack(host_proto)
+
+	var helper: Node3D = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
+	helper.name = "XRControllerInteractionHelper"
+	helper.set("controller_scene", packed)
+	origin.add_child(helper)
 
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
@@ -140,6 +116,63 @@ func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
 		origin.add_child(ctrl)
 		if hand == "left":  _left_ctrl  = ctrl
 		else:               _right_ctrl = ctrl
+
+	return cp.call("get_control_viewport") as SubViewport
+
+
+# Fallback when XR is not available: standalone SubViewport for 2D window only.
+func _make_fallback_ui_vp() -> SubViewport:
+	var ui_vp := SubViewport.new()
+	ui_vp.name = "UIViewport"
+	ui_vp.size = Vector2i(1280, 720)
+	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(ui_vp)
+	var test = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
+	test.name = "TestInteractionUI"
+	ui_vp.add_child(test)
+	return ui_vp
+
+
+func _setup_2d(ui_vp: SubViewport) -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "GUI2D"
+	add_child(layer)
+
+	var fwd := _InputForwarder.new()
+	fwd.name = "UIInputForwarder"
+	fwd.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fwd.ui_vp = ui_vp
+	layer.add_child(fwd)
+
+	var tr := TextureRect.new()
+	tr.name = "UITextureRect"
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.texture = ui_vp.get_texture()
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(tr)
+
+
+class _InputForwarder extends Control:
+	var ui_vp: SubViewport
+
+	func _gui_input(event: InputEvent) -> void:
+		if ui_vp == null:
+			return
+		if event is InputEventMouse:
+			var vp_size := Vector2(ui_vp.size)
+			var my_size := size
+			var scale := vp_size / my_size
+			var ev := event.duplicate() as InputEventMouse
+			ev.position = event.position * scale
+			if ev is InputEventMouseMotion:
+				(ev as InputEventMouseMotion).relative = \
+					(event as InputEventMouseMotion).relative * scale
+			ui_vp.push_input(ev)
+		else:
+			ui_vp.push_input(event)
+		accept_event()
+
 
 func _process(delta: float) -> void:
 	_elapsed += delta
