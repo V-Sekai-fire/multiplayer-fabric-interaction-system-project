@@ -1,20 +1,28 @@
 extends Node
 
+const AppTracer := preload("res://addons/interaction_system/app_tracer.gd")
+
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
 var _left_ctrl: XRController3D
 var _right_ctrl: XRController3D
+var _app_tracer: RefCounted  # AppTracer
 
 
 func _ready() -> void:
 	Engine.max_fps = 60
+	_app_tracer = AppTracer.new("user://otel_traces.db")
+	var startup_span := _app_tracer.begin_startup("interaction-system-test")
+
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
 	var ui_vp := _setup_xr(ulid)
 	if ui_vp == null:
 		ui_vp = _make_fallback_ui_vp()
 	_setup_2d(ui_vp)
+
+	_app_tracer.end_startup(startup_span)
 
 
 func _set_title(ulid: String) -> void:
@@ -120,6 +128,7 @@ func _setup_xr(ulid: String) -> SubViewport:
 	dma.name = "DesktopMouseAction"
 	dma.set("interaction_manager", im)
 	dma.set("canvas_plane_node", cp)
+	dma.set("_app_tracer", _app_tracer)
 	var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
 	ia.name = "InteractionAction"
 	dma.add_child(ia)
