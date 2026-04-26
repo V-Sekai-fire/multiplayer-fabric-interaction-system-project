@@ -111,4 +111,4 @@ func _process(delta: float) -> void:
 		get_tree().quit()
 	# Push ego-centric camera transform to sky shader each frame
 	if _sky_mat and _xr_cam:
-		_sky_mat.set_shader_parameter("ego_basis", _xr_cam.global_transform.basis)
+		_sky_mat.set_shader_parameter("ego_basis", Projection(_xr_cam.global_transform))
