@@ -12,7 +12,7 @@
 ##   OptionButton point + press → dropdown, aim + press to select item
 ##   LineEdit     point + press to focus, keyboard/virtual input
 ##   ScrollContainer  point + hold + translate (scroll region)
-extends Node
+extends Control
 
 # ── panel controls ───────────────────────────────────────────────────────────
 var _btn_action:   Button
@@ -46,6 +46,7 @@ func _ready() -> void:
 # ── scene construction ────────────────────────────────────────────────────────
 
 func _build_ui() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.2292, 0.2845, 0.2995, 1.0)  # okhsl H=0.60 S=0.15 L=0.30
