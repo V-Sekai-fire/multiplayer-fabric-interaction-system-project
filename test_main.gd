@@ -65,22 +65,6 @@ func _setup_xr() -> void:
 	_xr_cam.position = Vector3.UP * 1.6
 	origin.add_child(_xr_cam)
 
-	# Ego-centric headlamp: labels parented to camera, fixed in camera space
-	# They dip into the lower-left corner of the viewport at 0.4m depth
-	var headlamp_axes := [
-		{ "offset": Vector3(-0.18, -0.13, -0.4), "text": "RIGHT\nMODEL_LEFT",  "color": Color(1, 0.3, 0.3) },
-		{ "offset": Vector3(-0.18, -0.06, -0.4), "text": "UP\nMODEL_TOP",      "color": Color(0.3, 1, 0.3) },
-		{ "offset": Vector3(-0.18, -0.20, -0.4), "text": "BACK\nMODEL_FRONT",  "color": Color(0.3, 0.5, 1) },
-	]
-	for entry in headlamp_axes:
-		var lbl := Label3D.new()
-		lbl.text = entry["text"]
-		lbl.modulate = entry["color"]
-		lbl.pixel_size = 0.002
-		lbl.position = entry["offset"]
-		# No billboard — fixed in camera space since parented to camera
-		_xr_cam.add_child(lbl)
-
 	var ui_vp := SubViewport.new()
 	ui_vp.name = "UIViewport"
 	ui_vp.size = Vector2i(1280, 720)
