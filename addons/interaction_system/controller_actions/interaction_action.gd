@@ -35,6 +35,12 @@ func on_button_event(mb: InputEventMouseButton) -> bool:
 	mb.global_position = current_pos_2d.round()
 	mb.position = current_pos_2d.round()
 	interaction_manager.handle_mouse_button(current_canvas_item, mb)
+	var tracer = get_parent().get("_tracer")
+	if tracer and current_canvas_item:
+		tracer.record_dispatch(
+			"press" if mb.pressed else "release",
+			current_canvas_item.get_class(),
+			current_pos_2d)
 	return mb.pressed
 
 func on_pose_changed(pose: XRPose):
@@ -47,11 +53,24 @@ func on_pose_changed(pose: XRPose):
 		query.override_point_set[current_poi] = true
 	else:
 		query.override_point_set.clear()
-	if not interaction_manager.query_pointer_3d(query):
+	var tracer = get_parent().get("_tracer")
+	var poi_count := interaction_manager.lasso_db.point_set.size()
+	if tracer:
+		tracer.begin_query(poi_count)
+
+	var found := interaction_manager.query_pointer_3d(query)
+
+	if not found:
+		if tracer:
+			tracer.record_query_result(false, "", Vector2.ZERO)
+			tracer.end_query()
 		return
 
 	current_poi = query.out_best_poi
 	if current_poi == null:
+		if tracer:
+			tracer.record_query_result(false, "no_poi", Vector2.ZERO)
+			tracer.end_query()
 		return
 	current_canvas_plane = interaction_manager.get_canvas_plane_from_poi(query.out_best_poi)
 	var old_canvas_item: CanvasItem = current_canvas_item
@@ -59,6 +78,12 @@ func on_pose_changed(pose: XRPose):
 	current_target_pos_3d = query.get_position_3d(current_poi)
 
 	current_pos_2d = interaction_manager.get_position_on_canvas_plane(current_canvas_plane, current_target_pos_3d)
+
+	if tracer:
+		var ci_type := current_canvas_item.get_class() if current_canvas_item else "null"
+		tracer.record_query_result(true, ci_type, current_pos_2d)
+		tracer.end_query()
+
 	interaction_manager.handle_pointer_moved_2d(old_canvas_item, current_canvas_item, current_pos_2d)
 	if laser_mesh_instance != null:
 		# print("Target pos 3d = " + str(current_target_pos_3d) + " / Target 2d = " + str(current_pos_2d))

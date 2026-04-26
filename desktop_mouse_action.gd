@@ -8,17 +8,21 @@
 # No scale parameters to configure — it just measures the actual physical canvas.
 extends "res://addons/interaction_system/action_host.gd"
 
+const LassoTracer := preload("res://addons/interaction_system/lasso_tracer.gd")
+
 # Set from test_main.gd after the canvas plane is created.
 var canvas_plane_node: Node3D
 
 var _pose   := XRPose.new()
 var _win_vp : Viewport
+var _tracer : RefCounted   # LassoTracer instance
 
 
 func _ready() -> void:
 	_pose.name = &"aim"
 	_pose.tracking_confidence = XRPose.XR_TRACKING_CONFIDENCE_HIGH
 	_win_vp = get_viewport()
+	_tracer = LassoTracer.new()
 	super._ready()
 
 
@@ -26,13 +30,17 @@ func _input(event: InputEvent) -> void:
 	if interaction_manager == null or canvas_plane_node == null:
 		return
 	if event is InputEventMouseMotion:
+		_tracer.begin_input("MouseMotion", (event as InputEventMouseMotion).global_position)
 		_update_pose((event as InputEventMouseMotion).global_position)
+		_tracer.end_input()
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		_tracer.begin_input("MouseButton", mb.global_position)
 		_update_pose(mb.global_position)
 		var clone := mb.duplicate() as InputEventMouseButton
 		clone.resource_name = str(mb.button_index)
 		fire_button_event(clone)
+		_tracer.end_input()
 
 
 func _get_canvas_world_bounds() -> Array:
@@ -98,4 +106,5 @@ func _update_pose(screen_pos: Vector2) -> void:
 	var source_pos      := point_on_canvas + normal * 0.1
 
 	_pose.transform = Transform3D(Basis.looking_at(-normal), source_pos)
+	_tracer.begin_pose(uv, source_pos)
 	fire_pose_changed(_pose)
