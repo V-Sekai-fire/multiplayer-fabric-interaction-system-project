@@ -87,6 +87,12 @@ func _setup_xr(ulid: String) -> SubViewport:
 	cp.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
 	origin.add_child(cp)  # triggers cp._ready() → SubViewport + ControlRoot created
 
+	# canvas_plane sets FLAG_ALBEDO_TEXTURE_FORCE_SRGB which causes incorrect gamma
+	# in the XR linear pipeline — viewport texture is already in the right space.
+	var cp_mat := cp.get("material") as StandardMaterial3D
+	if cp_mat:
+		cp_mat.set_flag(BaseMaterial3D.FLAG_ALBEDO_TEXTURE_FORCE_SRGB, false)
+
 	# Single TestInteractionUI lives inside the CanvasPlane
 	var test_ui: Node = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
 	test_ui.name = "TestInteractionUI"
