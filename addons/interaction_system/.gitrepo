@@ -4,8 +4,8 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/V-Sekai/interaction_system.git
+	remote = https://github.com/V-Sekai-fire/multiplayer-fabric-interaction-system.git
 	branch = fix/remove-game-specific-names
-	commit = FETCH_HEAD
+	commit = 3a73b15
 	parent = 80730049ff1c6ce20854815f66c1db77899621ad
 	cmdver = 0.1.0
