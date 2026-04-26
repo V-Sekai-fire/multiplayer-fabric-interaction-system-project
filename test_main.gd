@@ -63,7 +63,7 @@ func _setup_xr(ulid: String) -> SubViewport:
 	world_env.environment = env
 	xr_vp.add_child(world_env)
 
-	# InteractionManager — must be in viewport before XRControllerInteractionHelper
+	# InteractionManager — must enter xr_vp before XRControllerInteractionHelper
 	var im: Node = load("res://addons/interaction_system/interaction_manager.gd").new()
 	im.name = "InteractionManager"
 	xr_vp.add_child(im)
@@ -86,7 +86,7 @@ func _setup_xr(ulid: String) -> SubViewport:
 	cp.set("canvas_height", 720.0)
 	cp.set("canvas_scale",  0.0025)
 	cp.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
-	origin.add_child(cp)  # triggers cp._ready() → SubViewport + ControlRoot created
+	origin.add_child(cp)
 
 	# canvas_plane sets FLAG_ALBEDO_TEXTURE_FORCE_SRGB which causes incorrect gamma
 	# in the XR linear pipeline — viewport texture is already in the right space.
@@ -94,15 +94,13 @@ func _setup_xr(ulid: String) -> SubViewport:
 	if cp_mat:
 		cp_mat.set_flag(BaseMaterial3D.FLAG_ALBEDO_TEXTURE_FORCE_SRGB, false)
 
-	# Single TestInteractionUI lives inside the CanvasPlane
 	var test_ui: Node = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
 	test_ui.name = "TestInteractionUI"
 	cp.call("get_control_root").add_child(test_ui)
 
-	# Register canvas deferred so test_ui._ready() has run first
 	im.call_deferred("register_canvas", cp)
 
-	# XRControllerInteractionHelper: spawns one xr_action_host.tscn per tracker
+	# XR controllers — one xr_action_host.tscn per tracker via helper
 	var helper: Node3D = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
 	helper.name = "XRControllerInteractionHelper"
 	helper.set("controller_scene", load("res://addons/interaction_system/example/xr_action_host.tscn"))
@@ -116,6 +114,16 @@ func _setup_xr(ulid: String) -> SubViewport:
 		if hand == "left":  _left_ctrl  = ctrl
 		else:               _right_ctrl = ctrl
 
+	# Desktop mouse → lasso. Lives in main scene to receive window _input() natively.
+	# interaction_action child runs the same lasso query path as XR controllers.
+	var dma: Node3D = load("res://desktop_mouse_action.gd").new()
+	dma.name = "DesktopMouseAction"
+	dma.set("interaction_manager", im)
+	var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
+	ia.name = "InteractionAction"
+	dma.add_child(ia)
+	add_child(dma)
+
 	return cp.call("get_control_viewport") as SubViewport
 
 
@@ -126,23 +134,17 @@ func _make_fallback_ui_vp() -> SubViewport:
 	ui_vp.size = Vector2i(1280, 720)
 	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(ui_vp)
-	var test = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
+	var test: Node = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
 	test.name = "TestInteractionUI"
 	ui_vp.add_child(test)
 	return ui_vp
 
 
+# 2D window: display-only TextureRect. Input comes from DesktopMouseAction via lasso.
 func _setup_2d(ui_vp: SubViewport) -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "GUI2D"
 	add_child(layer)
-
-	var fwd := _InputForwarder.new()
-	fwd.name = "UIInputForwarder"
-	fwd.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	fwd.ui_vp = ui_vp
-	layer.add_child(fwd)
-
 	var tr := TextureRect.new()
 	tr.name = "UITextureRect"
 	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -150,27 +152,6 @@ func _setup_2d(ui_vp: SubViewport) -> void:
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(tr)
-
-
-class _InputForwarder extends Control:
-	var ui_vp: SubViewport
-
-	func _gui_input(event: InputEvent) -> void:
-		if ui_vp == null:
-			return
-		if event is InputEventMouse:
-			var vp_size := Vector2(ui_vp.size)
-			var my_size := size
-			var scale := vp_size / my_size
-			var ev := event.duplicate() as InputEventMouse
-			ev.position = event.position * scale
-			if ev is InputEventMouseMotion:
-				(ev as InputEventMouseMotion).relative = \
-					(event as InputEventMouseMotion).relative * scale
-			ui_vp.push_input(ev)
-		else:
-			ui_vp.push_input(event)
-		accept_event()
 
 
 func _process(delta: float) -> void:
