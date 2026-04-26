@@ -135,12 +135,17 @@ structure Vec3 where
 -- where halfW = size.x/2 * canvas_plane_scale, halfH = size.y/2 * canvas_plane_scale.
 
 -- ── Canvas constants (μm) ───────────────────────────────────────────────────
+-- canvas_width = 1280 px,  canvas_height = 720 px,  offset_ratio = (0.5, 0.5).
+-- Source position uses UI_PIXELS_TO_METER = 1/1024 (matching canvas_3d_anchor),
+-- NOT the physical mesh scale (canvas_plane_scale = 0.0025).
+-- anchor_x = (canvas_px − 640) / 1024 m  →  halfW = 640/1024 m = 625 000 μm
+-- anchor_y = (360 − canvas_py) / 1024 m  →  halfH = 360/1024 m ≈ 351 562 μm
 
-/-- Canvas physical half-width: 0.8 m = 800 000 μm. -/
-def halfW : Int := 800000
+/-- Anchor half-width: canvas_width/2 * UI_PIXELS_TO_METER = 640/1024 m = 625 000 μm. -/
+def halfW : Int := 625000
 
-/-- Canvas physical half-height: 0.45 m = 450 000 μm. -/
-def halfH : Int := 450000
+/-- Anchor half-height: canvas_height/2 * UI_PIXELS_TO_METER = 360/1024 m ≈ 351 562 μm. -/
+def halfH : Int := 351562
 
 /-- Canvas centre Y: 1.6 m = 1 600 000 μm above XROrigin3D. -/
 def centreY : Int := 1600000
@@ -218,14 +223,18 @@ theorem uv_v_upper (winW_screen winH_screen px_screen py_screen : Int) :
     (screenToUV winW_screen winH_screen px_screen py_screen).2 ≤ UV_MAX :=
   clampUV_upper _
 
--- ── CanvasUV to GodotWorldSpace source pose ─────────────────────────────────
--- x_world = (u_uv − UV_MAX/2) × 2 × halfW / UV_MAX
--- y_world = centreY + (UV_MAX/2 − v_uv) × 2 × halfH / UV_MAX  (Y-flip: v-down → Y-up)
--- z_world = centreZ + frontOffset                               (in front of canvas)
+-- ── CanvasUV to GodotWorldSpace source pose (anchor scale) ──────────────────
+-- Uses UI_PIXELS_TO_METER = 1/1024 to match canvas_3d_anchor.
+-- canvas_px = u_uv * 1280 / UV_MAX   →   x = (canvas_px − 640) / 1024 m
+-- canvas_py = v_uv * 720  / UV_MAX   →   y = (360 − canvas_py)  / 1024 m  (Y-flip)
+-- In integer μm (UV_MAX = 1 000 000):
+--   x = (u_uv * 1280 − 640 * UV_MAX) / 1024   =  (u_uv − UV_MAX/2) * 1280 / 1024
+--   y = (360 * UV_MAX − v_uv * 720)  / 1024
+-- z_world = centreZ + frontOffset               (0.1 m in front of canvas)
 
 def uvToSourceWorld (u_uv v_uv : Int) : Vec3 :=
-  { x := (u_uv - UV_MAX / 2) * 2 * halfW / UV_MAX
-    y := centreY + (UV_MAX / 2 - v_uv) * 2 * halfH / UV_MAX
+  { x := (u_uv - UV_MAX / 2) * 1280 / 1024
+    y := centreY + (360 * UV_MAX - v_uv * 720) / 1024
     z := centreZ + frontOffset }
 
 /-- Source z_world is always centreZ + frontOffset = −1 400 000 μm (−1.4 m). -/
@@ -391,27 +400,29 @@ theorem aligned_within_rejection_sphere :
   simp [frontOffset, rejectionSize]
 
 -- ── Corner orientation note (verified against desktop_mouse_action.gd) ─────
--- PlaneMesh corners in GodotWorldSpace for canvas at centreY=1.6m, centreZ=−1.5m:
---   c00 = mi.global_transform * (−hw, 0, −hh) = (−0.8, 2.05, −1.5)  TOP-LEFT
---   c10 = mi.global_transform * (+hw, 0, −hh) = (+0.8, 2.05, −1.5)  TOP-RIGHT
---   c01 = mi.global_transform * (−hw, 0, +hh) = (−0.8, 1.15, −1.5)  BOTTOM-LEFT
---   c11 = mi.global_transform * (+hw, 0, +hh) = (+0.8, 1.15, −1.5)  BOTTOM-RIGHT
+-- Source position uses UI_PIXELS_TO_METER = 1/1024 (anchor scale), NOT physical mesh scale.
+-- canvas_plane_node.global_transform is the reference frame; source placed at canvas-local
+-- (x3, y3, 0.1m) where x3 = (canvas_px − 640) / 1024, y3 = (360 − canvas_py) / 1024.
 --
--- right_vec = c10 − c00 = (1.6,  0, 0)  → world +X ✓
--- up_vec    = c00 − c01 = (0,  0.9, 0)  → world +Y ✓  (FIX: was c01−c00 = −Y, BUG)
+-- Source world positions at canonical pixels (1280×720 canvas, centreZ = −1.5m):
+--   uv=(0,0)  [top-left]     → source_x = −625000 μm, source_y = centreY + 351562 μm
+--   uv=(1,0)  [top-right]    → source_x = +625000 μm, source_y = centreY + 351562 μm
+--   uv=(0,1)  [bottom-left]  → source_x = −625000 μm, source_y = centreY − 351563 μm
+--   uv=(1,1)  [bottom-right] → source_x = +625000 μm, source_y = centreY − 351563 μm
+--   uv=(0.5, 0.5) [centre]   → source_x = 0,          source_y = centreY
 --
--- With up_vec = +Y and y3 = (0.5 − uv.y) × halfH × 2:
---   uv.y=0 (screen top)    → y3 = +halfH → point.y = centreY + halfH  TOP ✓
---   uv.y=1 (screen bottom) → y3 = −halfH → point.y = centreY − halfH  BOTTOM ✓
--- This matches uvToSourceWorld: y_world = centreY + (UV_MAX/2 − v_uv) × 2 × halfH / UV_MAX
+-- X is symmetric (halfW = 625000 μm both sides).
+-- Y is off by 1 μm top-vs-bottom due to floor division (see uv_y_bottom_maps_to_canvas_bottom).
 
 /-- Y-mapping is correct: screen top (v=0) maps to canvas top (centreY+halfH). -/
 theorem uv_y_top_maps_to_canvas_top :
     (uvToSourceWorld 0 0).y = centreY + halfH := by native_decide
 
-/-- Y-mapping is correct: screen bottom (v=UV_MAX) maps to canvas bottom (centreY−halfH). -/
+/-- Y-mapping: screen bottom (v=UV_MAX) maps to centreY − halfH − 1.
+    The −1 is a floor-division artefact: 360_000_000 mod 1024 = 512, so
+    −360_000_000 / 1024 = −351563 (floors toward −∞) while +360_000_000 / 1024 = 351562. -/
 theorem uv_y_bottom_maps_to_canvas_bottom :
-    (uvToSourceWorld 0 UV_MAX).y = centreY - halfH := by native_decide
+    (uvToSourceWorld 0 UV_MAX).y = centreY - halfH - 1 := by native_decide
 
 -- Note: general ±halfW bounds for x/y require Int.ediv lemmas (Mathlib).
 -- The concrete Action Button checks below cover the practical case via native_decide.
@@ -449,10 +460,11 @@ theorem source_at_top_left :
     (uvToSourceWorld 0 0).x = -halfW ∧
     (uvToSourceWorld 0 0).y = centreY + halfH := by native_decide
 
-/-- Bottom-right UV maps to source at bottom-right corner of canvas. -/
+/-- Bottom-right UV maps to source at bottom-right corner of canvas.
+    y = centreY − halfH − 1 due to floor-division asymmetry (see uv_y_bottom_maps_to_canvas_bottom). -/
 theorem source_at_bottom_right :
     (uvToSourceWorld UV_MAX UV_MAX).x = halfW ∧
-    (uvToSourceWorld UV_MAX UV_MAX).y = centreY - halfH := by native_decide
+    (uvToSourceWorld UV_MAX UV_MAX).y = centreY - halfH - 1 := by native_decide
 
 -- ── Edge cases: pillarbox (wider than 16:9, e.g. 2560 × 1080 ultrawide) ─────
 -- 1920×1080 is exactly 16:9; use 2560×1080 for a genuine pillarbox.

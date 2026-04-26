@@ -3,9 +3,6 @@
 # Lives in the main scene (not xr_vp) so it receives window _input() natively.
 # Converts screen mouse position to a 3D canvas-plane pose, then fires through
 # the interaction_action child — same lasso query path as XR controllers.
-#
-# Scale-safe: derives canvas bounds from the mesh's world-space AABB at runtime.
-# No scale parameters to configure — it just measures the actual physical canvas.
 extends "res://addons/interaction_system/action_host.gd"
 
 const LassoTracer := preload("res://addons/interaction_system/lasso_tracer.gd")
@@ -43,68 +40,38 @@ func _input(event: InputEvent) -> void:
 		_tracer.end_input()
 
 
-func _get_canvas_world_bounds() -> Array:
-	# Returns [center: Vector3, half_w: float, half_h: float, right: Vector3, up: Vector3, normal: Vector3]
-	# Uses the PlaneMesh's 4 corners in world space — coplanar by definition for a flat quad.
-	# No config params: everything derived from the mesh transform at runtime.
-	var mi := canvas_plane_node.find_child("MeshInstance3D", true, false) as MeshInstance3D
-	if mi == null or not (mi.mesh is PlaneMesh):
-		var xf := canvas_plane_node.global_transform
-		return [xf.origin, 0.8, 0.45,
-				xf.basis.x.normalized(), xf.basis.y.normalized(), xf.basis.z.normalized()]
-	var pm  := mi.mesh as PlaneMesh
-	var hw  := pm.size.x * 0.5
-	var hh  := pm.size.y * 0.5
-	# Corners in PlaneMesh local space (XZ plane before rotate_x + scale on mesh_instance)
-	var c00 := mi.global_transform * Vector3(-hw, 0.0, -hh)
-	var c10 := mi.global_transform * Vector3( hw, 0.0, -hh)
-	var c01 := mi.global_transform * Vector3(-hw, 0.0,  hh)
-	var c11 := mi.global_transform * Vector3( hw, 0.0,  hh)
-	var center := (c00 + c11) * 0.5
-	var right  := (c10 - c00)   # world +X (left → right)
-	var up_vec := (c00 - c01)   # world +Y (bottom → top); c00=top-left, c01=bottom-left
-	var half_w := right.length()   * 0.5
-	var half_h := up_vec.length()  * 0.5
-	var normal := right.normalized().cross(up_vec.normalized())
-	return [center, half_w, half_h, right.normalized(), up_vec.normalized(), normal]
-
-
 func _update_pose(screen_pos: Vector2) -> void:
-	var bounds  := _get_canvas_world_bounds()
-	var center: Vector3 = bounds[0]
-	var half_w: float   = bounds[1]
-	var half_h: float   = bounds[2]
-	var right:  Vector3 = bounds[3]
-	var up_vec: Vector3 = bounds[4]
-	var normal: Vector3 = bounds[5]
+	var cw: float = canvas_plane_node.get("canvas_width")
+	var ch: float = canvas_plane_node.get("canvas_height")
+	if cw < 1.0 or ch < 1.0:
+		return
 
-	if half_w < 0.001 or half_h < 0.001:
-		return  # mesh not ready yet
+	var win := Vector2(_win_vp.size)
+	if win.x < 1.0 or win.y < 1.0:
+		return
 
-	var canvas_aspect := half_w / half_h
-	var win       := Vector2(_win_vp.size)
-	var win_aspect := win.x / win.y
+	# Pillarbox/letterbox: map screen pixel to normalised canvas UV [0,1]²
 	var uv: Vector2
-
-	if win_aspect > canvas_aspect:
-		var cw := win.y * canvas_aspect
-		uv.x = (screen_pos.x - (win.x - cw) * 0.5) / cw
+	if win.x * ch > win.y * cw:
+		var cw_screen := win.y * cw / ch
+		uv.x = (screen_pos.x - (win.x - cw_screen) * 0.5) / cw_screen
 		uv.y = screen_pos.y / win.y
 	else:
-		var ch := win.x / canvas_aspect
+		var ch_screen := win.x * ch / cw
 		uv.x = screen_pos.x / win.x
-		uv.y = (screen_pos.y - (win.y - ch) * 0.5) / ch
-
+		uv.y = (screen_pos.y - (win.y - ch_screen) * 0.5) / ch_screen
 	uv = uv.clamp(Vector2.ZERO, Vector2.ONE)
 
-	# Use corner-derived right/up — tracks XROrigin3D movement since corners
-	# are read from mi.global_transform at query time.
-	var x3 := (uv.x - 0.5) * half_w * 2.0
-	var y3 := (0.5 - uv.y) * half_h * 2.0  # flip Y: screen top = world up
+	# Source position uses UI_PIXELS_TO_METER = 1/1024 — same scale as canvas_3d_anchor.
+	# canvas_3d_anchor places anchors at (px - cw/2, ch/2 - py) / 1024 in canvas-plane local space.
+	const UI_PM := 1.0 / 1024.0
+	var x3 := (uv.x * cw - cw * 0.5) * UI_PM
+	var y3 := (ch * 0.5 - uv.y * ch) * UI_PM
 
-	var point_on_canvas := center + right * x3 + up_vec * y3
-	var source_pos      := point_on_canvas + normal * 0.1
+	var cp_xf := canvas_plane_node.global_transform
+	var point_on_canvas := cp_xf.origin + cp_xf.basis.x * x3 + cp_xf.basis.y * y3
+	var source_pos := point_on_canvas + cp_xf.basis.z * 0.1
 
-	_pose.transform = Transform3D(Basis.looking_at(-normal), source_pos)
+	_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z), source_pos)
 	_tracer.begin_pose(uv, source_pos)
 	fire_pose_changed(_pose)

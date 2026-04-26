@@ -26,15 +26,21 @@ extends Canvas3D
 @export var canvas_plane_scale: float = 0.01:
 	set = set_canvas_plane_scale
 
-# Scale-safe: derives UV from the node's own global transform so any
-# parent scale or runtime canvas_plane_scale change is accounted for.
+# Converts a GodotWorldSpace position to a 2D viewport pixel position.
+# Must use the same scale as canvas_3d_anchor (UI_PIXELS_TO_METER = 1/1024)
+# so that the round-trip pixel → anchor → viewport_pixel is exact.
+# canvas_3d_anchor places anchors at:
+#   origin.x = (px - canvas_width  * offset_ratio.x) * (1/1024)
+#   origin.y = (1 - py + (canvas_height-1) * offset_ratio.y) * (1/1024)
+# Inverse (offset_ratio = (0.5,0.5) from Canvas3D default):
+#   px = local.x * 1024 + canvas_width  * 0.5
+#   py = 1 + (canvas_height-1)*0.5 - local.y * 1024
 func global_to_viewport(p_origin: Vector3) -> Vector2:
 	var local := global_transform.affine_inverse() * p_origin
-	var half_w := canvas_width  * 0.5 * canvas_plane_scale
-	var half_h := canvas_height * 0.5 * canvas_plane_scale
-	var u :=        (local.x /  half_w + 1.0) * 0.5
-	var v := 1.0 - ((local.y /  half_h + 1.0) * 0.5)  # flip Y: 2D top = 3D high
-	return Vector2(u * canvas_width, v * canvas_height)
+	const inv_upm := 1024.0  # 1 / UI_PIXELS_TO_METER from canvas_utils.gd
+	var px := local.x * inv_upm + canvas_width  * offset_ratio.x
+	var py := 1.0 + (canvas_height - 1.0) * offset_ratio.y - local.y * inv_upm
+	return Vector2(px, py)
 
 
 func _update() -> void:
