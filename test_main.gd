@@ -79,6 +79,28 @@ func _setup_xr(ulid: String = "") -> void:
 	_xr_cam.compositor = compositor
 	origin.add_child(_xr_cam)
 
+	# Canvas plane: SubViewport texture on a quad in XR space
+	# Kept for lasso debugging — interaction_action routes poses → call_gui_input here
+	var ui_vp := SubViewport.new()
+	ui_vp.name = "UIViewport"
+	ui_vp.size = Vector2i(1280, 720)
+	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	xr_vp.add_child(ui_vp)
+	var ui_xr = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
+	ui_xr.name = "TestInteractionUIXR"
+	ui_vp.add_child(ui_xr)
+	var quad := MeshInstance3D.new()
+	quad.name = "CanvasPlane"
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(1.6, 0.9)
+	quad.mesh = mesh
+	quad.position = Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = ui_vp.get_texture()
+	mat.flags_unshaded = true
+	quad.material_override = mat
+	origin.add_child(quad)
+
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
 		ctrl.name = "XRController_" + hand
