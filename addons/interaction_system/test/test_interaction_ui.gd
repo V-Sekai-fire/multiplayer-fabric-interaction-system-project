@@ -38,6 +38,11 @@ func _ready() -> void:
 # ── scene construction ────────────────────────────────────────────────────────
 
 func _build_ui() -> void:
+	var bg := ColorRect.new()
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.13, 0.13, 0.13, 1.0)
+	add_child(bg)
+
 	var root := HBoxContainer.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
