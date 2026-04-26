@@ -13,7 +13,7 @@ var _app_tracer: RefCounted  # AppTracer
 func _ready() -> void:
 	Engine.max_fps = 60
 	_app_tracer = AppTracer.new("user://otel_traces.db")
-	var startup_span := _app_tracer.begin_startup("interaction-system-test")
+	var startup_span: String = _app_tracer.begin_startup("interaction-system-test")
 
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
