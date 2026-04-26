@@ -1,10 +1,11 @@
 extends Node
 
-const QUIT_AFTER_FRAMES := 600
+const QUIT_AFTER_SECONDS := 30.0
 
-var _frame := 0
+var _elapsed := 0.0
 
 func _ready() -> void:
+	Engine.max_fps = 60
 	_setup_2d()
 	_setup_xr()
 
@@ -68,7 +69,7 @@ func _setup_xr() -> void:
 		im.name = "InteractionManager"
 		add_child(im)
 
-func _process(_delta: float) -> void:
-	_frame += 1
-	if _frame == QUIT_AFTER_FRAMES:
+func _process(delta: float) -> void:
+	_elapsed += delta
+	if _elapsed >= QUIT_AFTER_SECONDS:
 		get_tree().quit()
