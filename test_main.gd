@@ -4,6 +4,8 @@ const QUIT_AFTER_SECONDS := 30.0
 
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
+var _hud_mat: ShaderMaterial
+var _canvas_world_pos := Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
 
 func _ready() -> void:
 	Engine.max_fps = 60
@@ -65,6 +67,19 @@ func _setup_xr() -> void:
 	_xr_cam.position = Vector3.UP * 1.6
 	origin.add_child(_xr_cam)
 
+	# S2H HUD quad: position + crosshair + distance bar, parented to camera
+	var hud_shader := load("res://hud.gdshader") as Shader
+	_hud_mat = ShaderMaterial.new()
+	_hud_mat.shader = hud_shader
+	var hud_mesh := MeshInstance3D.new()
+	hud_mesh.name = "HUD"
+	var hud_quad := QuadMesh.new()
+	hud_quad.size = Vector2(0.22, 0.088)
+	hud_mesh.mesh = hud_quad
+	hud_mesh.material_override = _hud_mat
+	hud_mesh.position = Vector3(-0.14, -0.10, -0.35)
+	_xr_cam.add_child(hud_mesh)
+
 	var ui_vp := SubViewport.new()
 	ui_vp.name = "UIViewport"
 	ui_vp.size = Vector2i(1280, 720)
@@ -102,3 +117,8 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	if _elapsed >= QUIT_AFTER_SECONDS:
 		get_tree().quit()
+	if _hud_mat and _xr_cam:
+		var wpos := _xr_cam.global_position
+		_hud_mat.set_shader_parameter("cam_pos", wpos)
+		_hud_mat.set_shader_parameter("dist_to_canvas",
+			wpos.distance_to(_canvas_world_pos))
