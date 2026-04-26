@@ -5,6 +5,7 @@ const QUIT_AFTER_SECONDS := 30.0
 var _elapsed := 0.0
 var _xr_cam: XRCamera3D
 var _hud_mat: ShaderMaterial
+var _sky_mat: ShaderMaterial
 var _canvas_world_pos := Vector3.UP * 1.6 + Vector3.FORWARD * 1.5
 
 func _ready() -> void:
@@ -51,8 +52,15 @@ func _setup_xr(ulid: String = "") -> void:
 
 	# Debug sky: grid + horizon + X/Z axes via ShaderToHuman s2h_drawSkybox
 	var sky_shader := load("res://debug_sky.gdshader") as Shader
-	var sky_mat := ShaderMaterial.new()
-	sky_mat.shader = sky_shader
+	_sky_mat = ShaderMaterial.new()
+	_sky_mat.shader = sky_shader
+	# Push ULID as array of ASCII codes
+	if ulid != "":
+		var ascii_arr := PackedInt32Array()
+		for i in range(ulid.length()):
+			ascii_arr.append(ulid.unicode_at(i))
+		_sky_mat.set_shader_parameter("ulid_chars", ascii_arr)
+	var sky_mat := _sky_mat
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	var env := Environment.new()
@@ -105,16 +113,6 @@ func _setup_xr(ulid: String = "") -> void:
 	mat.flags_unshaded = true
 	quad.material_override = mat
 	origin.add_child(quad)
-
-	# ULID label above the canvas plane — unique identifier for this run
-	if ulid != "":
-		var id_lbl := Label3D.new()
-		id_lbl.text = ulid
-		id_lbl.pixel_size = 0.003
-		id_lbl.modulate = Color(0.8, 0.8, 0.2)
-		id_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		id_lbl.position = quad.position + Vector3.UP * 0.55
-		origin.add_child(id_lbl)
 
 	for hand in ["left", "right"]:
 		var ctrl := XRController3D.new()
