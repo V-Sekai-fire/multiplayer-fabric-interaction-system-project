@@ -33,7 +33,7 @@ func _setup_xr() -> void:
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = sky_shader
 	var sky := Sky.new()
-	sky.sky_material = _sky_mat
+	sky.sky_material = sky_mat
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
