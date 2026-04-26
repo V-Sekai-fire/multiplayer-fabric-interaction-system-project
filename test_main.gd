@@ -102,18 +102,10 @@ func _setup_xr(ulid: String) -> SubViewport:
 	# Register canvas deferred so test_ui._ready() has run first
 	im.call_deferred("register_canvas", cp)
 
-	# XRControllerInteractionHelper: spawns XRActionHost+interaction_action per tracker
-	var host_proto: Node3D = load("res://addons/interaction_system/xr_action_host.gd").new()
-	host_proto.name = "XRActionHost"
-	var ia: Node = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
-	ia.name = "InteractionAction"
-	host_proto.add_child(ia)
-	var packed := PackedScene.new()
-	packed.pack(host_proto)
-
+	# XRControllerInteractionHelper: spawns one xr_action_host.tscn per tracker
 	var helper: Node3D = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
 	helper.name = "XRControllerInteractionHelper"
-	helper.set("controller_scene", packed)
+	helper.set("controller_scene", load("res://addons/interaction_system/example/xr_action_host.tscn"))
 	origin.add_child(helper)
 
 	for hand in ["left", "right"]:
