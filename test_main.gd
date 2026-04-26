@@ -10,8 +10,9 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
-	_setup_2d()
-	_setup_xr(ulid)
+	var ui_vp := _setup_ui_viewport()
+	_setup_2d(ui_vp)
+	_setup_xr(ulid, ui_vp)
 
 func _set_title(ulid: String) -> void:
 	DisplayServer.window_set_title("Interaction System Test [%s]" % ulid)
@@ -27,15 +28,29 @@ func _gen_ulid() -> String:
 		result += CHARS[randi() % 32]
 	return result
 
-func _setup_2d() -> void:
+func _setup_ui_viewport() -> SubViewport:
+	var ui_vp := SubViewport.new()
+	ui_vp.name = "UIViewport"
+	ui_vp.size = Vector2i(1280, 720)
+	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(ui_vp)
+	var test = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
+	test.name = "TestInteractionUI"
+	ui_vp.add_child(test)
+	return ui_vp
+
+func _setup_2d(ui_vp: SubViewport) -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "GUI2D"
 	add_child(layer)
-	var test = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
-	test.name = "TestInteractionUI"
-	layer.add_child(test)
+	var tr := TextureRect.new()
+	tr.name = "UITextureRect"
+	tr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.texture = ui_vp.get_texture()
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	layer.add_child(tr)
 
-func _setup_xr(ulid: String = "") -> void:
+func _setup_xr(ulid: String, ui_vp: SubViewport) -> void:
 	var xr_interface := XRServer.find_interface("OpenXR")
 	if xr_interface == null or not xr_interface.is_initialized():
 		return
@@ -72,17 +87,8 @@ func _setup_xr(ulid: String = "") -> void:
 	_xr_cam.position = Vector3.UP * 1.6
 	origin.add_child(_xr_cam)
 
-	# Canvas plane: SubViewport texture on a quad in XR space
-	# Kept for lasso debugging — interaction_action routes poses → call_gui_input here
-	var ui_vp := SubViewport.new()
-	ui_vp.name = "UIViewport"
-	ui_vp.size = Vector2i(1280, 720)
-	ui_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	xr_vp.add_child(ui_vp)
-	var ui_xr = load("res://addons/interaction_system/test/test_interaction_ui.gd").new()
-	ui_xr.name = "TestInteractionUIXR"
-	ui_vp.add_child(ui_xr)
-
+	# Canvas plane: shared UIViewport texture on a quad in XR space
+	# Same SubViewport shown in both the 2D window and XR — single source of truth
 	var quad := MeshInstance3D.new()
 	quad.name = "CanvasPlane"
 	var mesh := QuadMesh.new()
