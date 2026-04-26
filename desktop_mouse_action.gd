@@ -36,30 +36,45 @@ func _input(event: InputEvent) -> void:
 
 
 func _get_canvas_world_bounds() -> Array:
-	# Returns [center: Vector3, half_w: float, half_h: float, normal: Vector3]
-	# Derived from the mesh instance's world-space AABB — no config params needed.
+	# Returns [center: Vector3, half_w: float, half_h: float, right: Vector3, up: Vector3, normal: Vector3]
+	# Uses the PlaneMesh's 4 corners in world space — coplanar by definition for a flat quad.
+	# No config params: everything derived from the mesh transform at runtime.
 	var mi := canvas_plane_node.find_child("MeshInstance3D", true, false) as MeshInstance3D
-	if mi == null:
-		return [canvas_plane_node.global_transform.origin, 0.8, 0.45,
-				canvas_plane_node.global_transform.basis.z.normalized()]
-	var aabb: AABB = mi.get_aabb()
-	var center := mi.global_transform * aabb.get_center()
-	var size   := aabb.size * mi.global_transform.basis.get_scale()
-	var half_w := maxf(absf(size.x), absf(size.z)) * 0.5
-	var half_h := absf(size.y) * 0.5
-	var normal := canvas_plane_node.global_transform.basis.z.normalized()
-	return [center, half_w, half_h, normal]
+	if mi == null or not (mi.mesh is PlaneMesh):
+		var xf := canvas_plane_node.global_transform
+		return [xf.origin, 0.8, 0.45,
+				xf.basis.x.normalized(), xf.basis.y.normalized(), xf.basis.z.normalized()]
+	var pm  := mi.mesh as PlaneMesh
+	var hw  := pm.size.x * 0.5
+	var hh  := pm.size.y * 0.5
+	# Corners in PlaneMesh local space (XZ plane before rotate_x + scale on mesh_instance)
+	var c00 := mi.global_transform * Vector3(-hw, 0.0, -hh)
+	var c10 := mi.global_transform * Vector3( hw, 0.0, -hh)
+	var c01 := mi.global_transform * Vector3(-hw, 0.0,  hh)
+	var c11 := mi.global_transform * Vector3( hw, 0.0,  hh)
+	var center := (c00 + c11) * 0.5
+	var right  := (c10 - c00)
+	var up_vec := (c01 - c00)
+	var half_w := right.length()   * 0.5
+	var half_h := up_vec.length()  * 0.5
+	var normal := right.normalized().cross(up_vec.normalized())
+	return [center, half_w, half_h, right.normalized(), up_vec.normalized(), normal]
 
 
 func _update_pose(screen_pos: Vector2) -> void:
-	var bounds := _get_canvas_world_bounds()
-	var center: Vector3  = bounds[0]
-	var half_w: float    = bounds[1]
-	var half_h: float    = bounds[2]
-	var normal: Vector3  = bounds[3]
+	var bounds  := _get_canvas_world_bounds()
+	var center: Vector3 = bounds[0]
+	var half_w: float   = bounds[1]
+	var half_h: float   = bounds[2]
+	var right:  Vector3 = bounds[3]
+	var up_vec: Vector3 = bounds[4]
+	var normal: Vector3 = bounds[5]
+
+	if half_w < 0.001 or half_h < 0.001:
+		return  # mesh not ready yet
 
 	var canvas_aspect := half_w / half_h
-	var win := Vector2(_win_vp.size)
+	var win       := Vector2(_win_vp.size)
 	var win_aspect := win.x / win.y
 	var uv: Vector2
 
@@ -74,14 +89,13 @@ func _update_pose(screen_pos: Vector2) -> void:
 
 	uv = uv.clamp(Vector2.ZERO, Vector2.ONE)
 
-	var cp_xform := canvas_plane_node.global_transform
+	# Use corner-derived right/up — tracks XROrigin3D movement since corners
+	# are read from mi.global_transform at query time.
 	var x3 := (uv.x - 0.5) * half_w * 2.0
-	var y3 := (0.5 - uv.y) * half_h * 2.0
+	var y3 := (0.5 - uv.y) * half_h * 2.0  # flip Y: screen top = world up
 
-	var point_on_canvas := center \
-		+ cp_xform.basis.x.normalized() * x3 \
-		+ cp_xform.basis.y.normalized() * y3
-	var source_pos := point_on_canvas + normal * 0.1
+	var point_on_canvas := center + right * x3 + up_vec * y3
+	var source_pos      := point_on_canvas + normal * 0.1
 
 	_pose.transform = Transform3D(Basis.looking_at(-normal), source_pos)
 	fire_pose_changed(_pose)
