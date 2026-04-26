@@ -15,8 +15,5 @@ void sky() {
 	// World-centric: infinite grid + horizon + X/Z axis indicators
 	s2h_drawSkybox(ctx);
 
-	// Ego-centric: camera local frame — X=red (RIGHT), Y=green (UP), Z=blue (BACK)
-	s2h_drawBasis(ctx, ego_basis, 0.5);
-
 	COLOR = ctx.dstColor.rgb;
 }

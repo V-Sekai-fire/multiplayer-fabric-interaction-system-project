@@ -3,7 +3,6 @@ extends Node
 const QUIT_AFTER_SECONDS := 30.0
 
 var _elapsed := 0.0
-var _sky_mat: ShaderMaterial
 var _xr_cam: XRCamera3D
 
 func _ready() -> void:
@@ -31,8 +30,8 @@ func _setup_xr() -> void:
 
 	# Debug sky: grid + horizon + X/Z axes via ShaderToHuman s2h_drawSkybox
 	var sky_shader := load("res://debug_sky.gdshader") as Shader
-	_sky_mat = ShaderMaterial.new()
-	_sky_mat.shader = sky_shader
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = sky_shader
 	var sky := Sky.new()
 	sky.sky_material = _sky_mat
 	var env := Environment.new()
@@ -51,26 +50,21 @@ func _setup_xr() -> void:
 	_xr_cam.position = Vector3.UP * 1.6
 	origin.add_child(_xr_cam)
 
-	# Ego-centric axis labels: world-centric / ego-centric enum name pairs
-	# at 0.6m along each local camera axis
-	var axis_labels := {
-		Vector3.RIGHT:   "RIGHT\nMODEL_LEFT",
-		Vector3.UP:      "UP\nMODEL_TOP",
-		Vector3.BACK:    "BACK\nMODEL_FRONT",
-	}
-	var axis_colors := {
-		Vector3.RIGHT:  Color(1, 0.2, 0.2),
-		Vector3.UP:     Color(0.2, 1, 0.2),
-		Vector3.BACK:   Color(0.2, 0.4, 1),
-	}
-	for axis in axis_labels:
+	# Ego-centric headlamp: labels parented to camera, fixed in camera space
+	# They dip into the lower-left corner of the viewport at 0.4m depth
+	var headlamp_axes := [
+		{ "offset": Vector3(-0.18, -0.13, -0.4), "text": "RIGHT\nMODEL_LEFT",  "color": Color(1, 0.3, 0.3) },
+		{ "offset": Vector3(-0.18, -0.06, -0.4), "text": "UP\nMODEL_TOP",      "color": Color(0.3, 1, 0.3) },
+		{ "offset": Vector3(-0.18, -0.20, -0.4), "text": "BACK\nMODEL_FRONT",  "color": Color(0.3, 0.5, 1) },
+	]
+	for entry in headlamp_axes:
 		var lbl := Label3D.new()
-		lbl.text = axis_labels[axis]
-		lbl.modulate = axis_colors[axis]
-		lbl.pixel_size = 0.004
-		lbl.position = _xr_cam.position + axis * 0.6
-		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		origin.add_child(lbl)
+		lbl.text = entry["text"]
+		lbl.modulate = entry["color"]
+		lbl.pixel_size = 0.002
+		lbl.position = entry["offset"]
+		# No billboard — fixed in camera space since parented to camera
+		_xr_cam.add_child(lbl)
 
 	var ui_vp := SubViewport.new()
 	ui_vp.name = "UIViewport"
@@ -109,6 +103,3 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	if _elapsed >= QUIT_AFTER_SECONDS:
 		get_tree().quit()
-	# Push ego-centric camera transform to sky shader each frame
-	if _sky_mat and _xr_cam:
-		_sky_mat.set_shader_parameter("ego_basis", Projection(_xr_cam.global_transform))
