@@ -10,6 +10,11 @@ uniform vec3  left_ctrl_pos   = vec3(0.0);
 uniform vec3  right_ctrl_pos  = vec3(0.0);
 uniform float dist_to_canvas  = 1.5;
 uniform float time_sec        = 0.0;
+uniform int   lasso_found     = 0;
+uniform int   lasso_poi_count = 0;
+uniform float lasso_eucl_dist = 0.0;
+uniform float lasso_ang_dist  = 0.0;
+uniform int   btn_press_count = 0;
 
 void sky() {
 	Context3D ctx;
@@ -72,6 +77,25 @@ void sky() {
 	s2h_printTxt(ui, _t, _COLON, _SPACE);
 	s2h_printFloat(ui, time_sec);
 	s2h_printTxt(ui, _s);
+	s2h_printLF(ui);
+
+	// Lasso debug — green if found, red if not
+	ui.textColor = lasso_found == 1
+		? float4(0.2, 0.9, 0.3, 1.0)
+		: float4(0.9, 0.2, 0.2, 1.0);
+	s2h_printTxt(ui, _L, _Q, _COLON, _SPACE);
+	s2h_printInt(ui, lasso_poi_count);
+	s2h_printTxt(ui, _p, _SPACE);
+	s2h_printFloat(ui, lasso_eucl_dist);
+	s2h_printTxt(ui, _m, _SPACE);
+	s2h_printFloat(ui, lasso_ang_dist);
+	s2h_printTxt(ui, _r);
+	s2h_printLF(ui);
+
+	// Button press count — yellow
+	ui.textColor = float4(1.0, 0.9, 0.2, 1.0);
+	s2h_printTxt(ui, _B, _T, _N, _COLON, _SPACE);
+	s2h_printInt(ui, btn_press_count);
 
 	float3 sky_col = ctx.dstColor.rgb;
 	COLOR = float3(sky_col * (1.0 - ui.dstColor.a) + ui.dstColor.rgb);

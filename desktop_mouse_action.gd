@@ -50,6 +50,7 @@ func _update_pose(screen_pos: Vector2) -> void:
 	if win.x < 1.0 or win.y < 1.0:
 		return
 
+
 	# Pillarbox/letterbox: map screen pixel to normalised canvas UV [0,1]²
 	var uv: Vector2
 	if win.x * ch > win.y * cw:
@@ -60,6 +61,9 @@ func _update_pose(screen_pos: Vector2) -> void:
 		var ch_screen := win.x * ch / cw
 		uv.x = screen_pos.x / win.x
 		uv.y = (screen_pos.y - (win.y - ch_screen) * 0.5) / ch_screen
+	# Only dispatch if mouse is actually over the canvas (not clamped to edge).
+	if uv.x < 0.0 or uv.x > 1.0 or uv.y < 0.0 or uv.y > 1.0:
+		return
 	uv = uv.clamp(Vector2.ZERO, Vector2.ONE)
 
 	# Source position uses UI_PIXELS_TO_METER = 1/1024 — same scale as canvas_3d_anchor.

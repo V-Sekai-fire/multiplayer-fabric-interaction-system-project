@@ -15,6 +15,12 @@ var current_pos_2d: Vector2
 var current_target_pos_3d: Vector3
 var pressed_buttons: Dictionary[StringName, bool]
 
+# Lasso debug state — read by test_main._process() → debug_sky shader
+var lasso_found    := false
+var lasso_poi_count := 0
+var lasso_eucl_dist := 0.0
+var lasso_ang_dist  := 0.0
+
 func on_action_added() -> void:
 	pass
 
@@ -59,6 +65,16 @@ func on_pose_changed(pose: XRPose):
 		tracer.begin_query(poi_count)
 
 	var found := interaction_manager.query_pointer_3d(query)
+
+	lasso_found = found
+	lasso_poi_count = poi_count
+	if found and query.out_poi_to_local.has(query.out_best_poi):
+		var local_pos := query.out_poi_to_local[query.out_best_poi]
+		lasso_eucl_dist = local_pos.length()
+		lasso_ang_dist  = local_pos.angle_to(Vector3(0.0, 0.0, -1.0))
+	else:
+		lasso_eucl_dist = 0.0
+		lasso_ang_dist  = 0.0
 
 	if not found:
 		if tracer:

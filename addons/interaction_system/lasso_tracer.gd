@@ -15,8 +15,20 @@ func _init() -> void:
 	if not ClassDB.class_exists("OpenTelemetry"):
 		return
 	_otel = OpenTelemetry.new()
-	_doc  = _otel.get_document()
+	_otel.name = "LassoTracer_OTel"
+	_doc = _otel.get_document()
+	# Add to scene root so _process() runs for non-blocking HTTP sends.
+	var project_name: String = ProjectSettings.get_setting("application/config/name", "godot-project")
+	_otel.init_tracer_provider(
+		"lasso",
+		"http://localhost:4318",
+		{"service.name": project_name}
+	)
 	_enabled = true
+	# add_child deferred — parent tree is busy during _init
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree and tree.root:
+		tree.root.add_child.call_deferred(_otel)
 
 
 # ── trace lifecycle ────────────────────────────────────────────────────────
@@ -71,6 +83,26 @@ func end_query() -> void:
 	_otel.end_span(_query_id)
 	_query_id = ""
 
+func record_poi_positions(poi_set: Dictionary) -> void:
+	if not _enabled or _query_id.is_empty():
+		return
+	var i := 0
+	for poi in poi_set:
+		if i >= 7:
+			break
+		var origin: Node3D = poi.origin
+		if origin and origin.is_inside_tree():
+			var gp: Vector3 = origin.global_position
+			var ci = poi.canvas_item if "canvas_item" in poi else null
+			var ci_name: String = ci.get_class() if ci else "unknown"
+			_otel.set_attributes(_query_id, {
+				"poi.%d.control" % i: ci_name,
+				"poi.%d.x" % i: gp.x,
+				"poi.%d.y" % i: gp.y,
+				"poi.%d.z" % i: gp.z,
+			})
+		i += 1
+
 func record_dispatch(action: String, canvas_item_type: String, pos2d: Vector2) -> void:
 	if not _enabled or _root_id.is_empty():
 		return
@@ -96,11 +128,6 @@ func end_input(error: String = "") -> void:
 		_otel.set_status(_root_id, 1, "ok")
 	_otel.end_span(_root_id)
 
-	# Print compact OTLP JSON for this trace
-	var state = _otel.get_state()
-	if state and _doc:
-		var json: String = _doc.serialize_traces(state)
-		print("[LASSO TRACE] ", json)
-		state.clear_spans()
+	_otel.flush_all()  # enqueues spans — _process() sends them without blocking
 
 	_root_id = ""

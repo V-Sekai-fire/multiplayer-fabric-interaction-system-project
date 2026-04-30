@@ -21,6 +21,7 @@ func _enter_tree() -> void:
 func register_node_3d(node: Node3D):
 	var lasso_point := lassodb_class.PointOfInterest.new()
 	lasso_point.register_point(lasso_db, node)
+	node.tree_exiting.connect(lasso_point.unregister_point)
 
 
 func register_canvas(cp: canvas_plane_class):
@@ -44,6 +45,7 @@ func register_canvas(cp: canvas_plane_class):
 		var form_3d_anchor := canvas_3d_anchor.new()
 		form_3d_anchor.canvas_item_node_path = NodePath("../" + str(cp.get_path_to(form_element)))
 		cp.add_child(form_3d_anchor)
+		form_3d_anchor.spatial_canvas = cp  # canvas_plane is the spatial canvas
 		# Add to LassoDB
 		register_node_3d(form_3d_anchor)
 		# Jump to next element
