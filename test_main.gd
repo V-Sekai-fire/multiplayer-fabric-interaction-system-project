@@ -194,8 +194,11 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# Register canvas (deferred so controls finish layout first)
 	im.call_deferred("register_canvas", cp)
 
-	# Desktop mouse → lasso bridge (desktop only; XR uses xr_controller_interaction_helper)
-	if not has_xr:
+	# Desktop mouse → lasso bridge — always active.
+	# In XR mode the XR controller drives pose; DMA adds a second input path for
+	# mouse clicks directly in the Godot window (the OS routes clicks to the focused
+	# Godot window regardless of whether the XR simulator is running).
+	if true:
 		var dma: Node3D = load("res://desktop_mouse_action.gd").new()
 		dma.name = "DesktopMouseAction"
 		dma.set("interaction_manager", im)
