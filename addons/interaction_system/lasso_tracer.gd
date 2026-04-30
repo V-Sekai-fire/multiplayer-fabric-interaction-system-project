@@ -9,23 +9,30 @@ var _root_id  := ""
 var _pose_id  := ""
 var _query_id := ""
 var _enabled  := false
-var spans_flushed: int = 0
+var spans_flushed:    int = 0
+var dispatches_ok:    int = 0
+var queries_found:    int = 0
+var queries_total:    int = 0
+# Last completed span summary — read by test_main for HUD
+var last_span:   StringName = &""   # e.g. &"lasso.dispatch"
+var last_status: int = 0            # 0=ok 1=err
+var last_tag:    StringName = &""   # op-specific detail, e.g. &"found" &"press"
 
 
 func _init() -> void:
 	if not ClassDB.class_exists("OpenTelemetry"):
 		return
-	var tree := Engine.get_main_loop() as SceneTree
-	# Prefer OTel node already in tree (created by test_main._init_otel).
-	var existing := tree.root.get_node_or_null("OTel") if tree and tree.root else null
-	if existing and existing is OpenTelemetry:
-		_otel = existing as OpenTelemetry
+	# Prefer OTel node registered by test_main._init_otel via Engine meta.
+	if Engine.has_meta("_otel_instance"):
+		_otel = Engine.get_meta("_otel_instance") as OpenTelemetry
 	else:
 		_otel = OpenTelemetry.new()
 		_otel.name = "LassoTracer_OTel"
 		var raw: String = ProjectSettings.get_setting("application/config/name", "godot-project")
 		var service_name := raw.to_lower().replace(" ", "-").replace("_", "-")
 		_otel.init_tracer_provider("lasso", "http://localhost:4318", {"service.name": service_name})
+		Engine.set_meta("_otel_instance", _otel)
+		var tree := Engine.get_main_loop() as SceneTree
 		if tree and tree.root:
 			tree.root.add_child.call_deferred(_otel)
 	_doc = _otel.get_document()
@@ -71,6 +78,9 @@ func begin_query(poi_count: int) -> void:
 	})
 
 func record_query_result(found: bool, canvas_item_type: String, pos2d: Vector2, target3d: Vector3 = Vector3.ZERO) -> void:
+	queries_total += 1
+	if found: queries_found += 1
+	last_span = &"lasso.query"; last_status = 0; last_tag = &"found" if found else &"miss"
 	if not _enabled or _query_id.is_empty():
 		return
 	_otel.set_attributes(_query_id, {
@@ -111,6 +121,8 @@ func record_poi_positions(poi_set: Dictionary) -> void:
 		i += 1
 
 func record_dispatch(action: String, canvas_item_type: String, pos2d: Vector2) -> void:
+	dispatches_ok += 1
+	last_span = &"lasso.dispatch"; last_status = 0; last_tag = &"press" if action == "press" else &"release"
 	if not _enabled or _root_id.is_empty():
 		return
 	var span := _otel.start_span_with_parent("lasso.dispatch", _root_id, 0, [], {

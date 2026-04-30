@@ -1,11 +1,20 @@
 extends Node
 
 var _elapsed := 0.0
+var _shader_tick := 0.0          # accumulator for 20 Hz shader updates
+const SHADER_HZ := 20.0
 var _xr_cam: XRCamera3D
 var _sky_mat: ShaderMaterial
 var _left_ctrl: XRController3D
 var _right_ctrl: XRController3D
 var _interaction_action: Node
+# OTel span persistence — ring buffer, only oldest slot fades
+const OTEL_N      := 8    # history depth
+const OTEL_CLEN   := 20   # max chars per span name + tag
+var _otel_span_n      := 0
+var _otel_hist_spans: Array[String] = []   # e.g. ["lasso.dispatch press", "lasso.query found"]
+var _otel_hist_counts: Array[int]   = []   # collapsed repeat count per entry
+var _otel_fade_age    := 0.0
 
 
 func _ready() -> void:
@@ -20,15 +29,17 @@ func _ready() -> void:
 func _init_otel() -> void:
 	if not ClassDB.class_exists("OpenTelemetry"):
 		return
-	# Reuse existing node if lasso_tracer already created one this session.
-	if get_node_or_null("OTel") != null:
+	if Engine.has_meta("_otel_instance"):
 		return
 	var otel := OpenTelemetry.new()
 	otel.name = "OTel"
 	var raw: String = ProjectSettings.get_setting("application/config/name", "godot-project")
 	var service_name := raw.to_lower().replace(" ", "-").replace("_", "-")
 	otel.init_tracer_provider("main", "http://localhost:4318", {"service.name": service_name})
-	add_child(otel)
+	# Register synchronously so lasso_tracer._init() finds it without a tree search.
+	Engine.set_meta("_otel_instance", otel)
+	# Deferred add avoids "parent busy" error during _ready() tree setup.
+	get_tree().root.add_child.call_deferred(otel)
 
 
 func _set_title(ulid: String) -> void:
@@ -195,28 +206,86 @@ func _setup_2d(ui_vp: SubViewport) -> void:
 	layer.add_child(tr)
 
 
+func _get_active_interaction_action() -> Node:
+	if _interaction_action:
+		return _interaction_action
+	# XR mode: find first interaction_action under any xr_action_host child
+	var helper := get_node_or_null("/root/TestMain/SceneViewport/XROrigin3D/XRControllerInteractionHelper")
+	if helper:
+		for host in helper.get_children():
+			var ia := host.get_node_or_null("InteractionAction")
+			if ia:
+				return ia
+	return null
+
+
 func _process(delta: float) -> void:
 	_elapsed += delta
-	if _sky_mat and not _xr_cam:
-		# Desktop mode: update s2h shader params each frame
-		_sky_mat.set_shader_parameter("time_sec", _elapsed)
-		if _interaction_action:
-			_sky_mat.set_shader_parameter("lasso_found",     1 if _interaction_action.lasso_found else 0)
-			_sky_mat.set_shader_parameter("lasso_poi_count", _interaction_action.lasso_poi_count)
-			_sky_mat.set_shader_parameter("lasso_eucl_dist", _interaction_action.lasso_eucl_dist)
-			_sky_mat.set_shader_parameter("lasso_ang_dist",  _interaction_action.lasso_ang_dist)
-	if _xr_cam and _sky_mat:
+	_shader_tick += delta
+	_otel_fade_age += delta
+
+	var ia := _get_active_interaction_action()
+	var tracer = ia.get_parent().get("_tracer") if ia else null
+
+	if tracer:
+		var n: int = tracer.spans_flushed
+		if n != _otel_span_n and tracer.last_span != &"":
+			_otel_span_n = n
+			var label: String = "%s %s" % [tracer.last_span, tracer.last_tag]
+			if not _otel_hist_spans.is_empty() and _otel_hist_spans[0] == label:
+				_otel_hist_counts[0] += 1
+			else:
+				_push_otel_str(label)
+		elif n != _otel_span_n:
+			_otel_span_n = n
+
+	if not _sky_mat:
+		return
+
+	# High-frequency params every frame
+	_sky_mat.set_shader_parameter("time_sec", _elapsed)
+	if _xr_cam:
 		var wpos := _xr_cam.global_position
-		var dist := wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5)
 		_sky_mat.set_shader_parameter("cam_pos", wpos)
-		_sky_mat.set_shader_parameter("dist_to_canvas", dist)
-		_sky_mat.set_shader_parameter("time_sec", _elapsed)
+		_sky_mat.set_shader_parameter("dist_to_canvas",
+			wpos.distance_to(Vector3.UP * 1.6 + Vector3.FORWARD * 1.5))
 		if _left_ctrl:
 			_sky_mat.set_shader_parameter("left_ctrl_pos",  _left_ctrl.global_position)
 		if _right_ctrl:
 			_sky_mat.set_shader_parameter("right_ctrl_pos", _right_ctrl.global_position)
-		if _interaction_action:
-			_sky_mat.set_shader_parameter("lasso_found",     1 if _interaction_action.lasso_found else 0)
-			_sky_mat.set_shader_parameter("lasso_poi_count", _interaction_action.lasso_poi_count)
-			_sky_mat.set_shader_parameter("lasso_eucl_dist", _interaction_action.lasso_eucl_dist)
-			_sky_mat.set_shader_parameter("lasso_ang_dist",  _interaction_action.lasso_ang_dist)
+
+	# 20 Hz throttled params (lasso + OTel)
+	if _shader_tick < 1.0 / SHADER_HZ:
+		return
+	_shader_tick = 0.0
+
+	if ia:
+		_sky_mat.set_shader_parameter("lasso_found",     1 if ia.get("lasso_found") else 0)
+		_sky_mat.set_shader_parameter("lasso_poi_count", ia.get("lasso_poi_count") if ia.get("lasso_poi_count") != null else 0)
+		_sky_mat.set_shader_parameter("lasso_eucl_dist", ia.get("lasso_eucl_dist") if ia.get("lasso_eucl_dist") != null else 0.0)
+		_sky_mat.set_shader_parameter("lasso_ang_dist",  ia.get("lasso_ang_dist") if ia.get("lasso_ang_dist") != null else 0.0)
+
+	# Encode string history as flat int[OTEL_N * OTEL_CLEN] ASCII char codes
+	var chars := PackedInt32Array(); chars.resize(OTEL_N * OTEL_CLEN)
+	var counts := PackedInt32Array(); counts.resize(OTEL_N)
+	for i in _otel_hist_spans.size():
+		var s: String = _otel_hist_spans[i]
+		counts[i] = _otel_hist_counts[i]
+		for j in min(s.length(), OTEL_CLEN):
+			chars[i * OTEL_CLEN + j] = s.unicode_at(j)
+	_sky_mat.set_shader_parameter("otel_span_n",      _otel_span_n)
+	_sky_mat.set_shader_parameter("otel_fade_age",    _otel_fade_age)
+	_sky_mat.set_shader_parameter("otel_hist_chars",  chars)
+	_sky_mat.set_shader_parameter("otel_hist_counts", counts)
+
+
+func _push_otel_str(label: String) -> void:
+	var full := _otel_hist_spans.size() >= OTEL_N
+	if full and _otel_fade_age < 3.0:
+		return
+	if full:
+		_otel_hist_spans.pop_back()
+		_otel_hist_counts.pop_back()
+		_otel_fade_age = 0.0
+	_otel_hist_spans.push_front(label)
+	_otel_hist_counts.push_front(1)

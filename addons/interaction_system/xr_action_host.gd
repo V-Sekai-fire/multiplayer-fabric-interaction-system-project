@@ -31,6 +31,9 @@ func _xr_tracker_pose(pose: XRPose):
 	var aim_dir := -xf.basis.z  # OpenXR: -Z is forward
 
 	# Replace straight-ray source with parabolic endpoint on the canvas plane.
+	# t_dist is meters along the ray; convert to time via CURVE_SPEED so gravity
+	# produces a gentle visual arc (~5 cm drop per metre at 10 m/s).
+	const CURVE_SPEED := 10.0  # virtual m/s
 	var canvas_planes := interaction_manager.canvas_planes if interaction_manager else []
 	if not canvas_planes.is_empty():
 		var cp_xf := canvas_planes[0].global_transform
@@ -38,9 +41,10 @@ func _xr_tracker_pose(pose: XRPose):
 		var plane_normal := -cp_xf.basis.z  # canvas face normal (toward viewer)
 		var denom := aim_dir.dot(plane_normal)
 		if abs(denom) > 0.001:
-			var t := to_plane.dot(plane_normal) / denom
-			if t > 0.01:
-				var hit := xf.origin + aim_dir * t + Vector3(0.0, -4.9 * t * t, 0.0)
+			var t_dist := to_plane.dot(plane_normal) / denom
+			if t_dist > 0.01:
+				var t_sec := t_dist / CURVE_SPEED
+				var hit := xf.origin + aim_dir * t_dist + Vector3(0.0, -4.9 * t_sec * t_sec, 0.0)
 				var source_pos := hit + cp_xf.basis.z * 0.1
 				var new_pose := XRPose.new()
 				new_pose.name = pose.name
