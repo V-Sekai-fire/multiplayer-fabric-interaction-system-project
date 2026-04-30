@@ -2,13 +2,13 @@ extends Node
 
 const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
-# Physical scene constants — independent of canvas configuration.
-const VR_EYE_HEIGHT_M     := 1.6  # standard standing eye height in VR (metres)
-const CANVAS_VIEW_DIST_M  := 1.5  # comfortable canvas-to-user viewing distance (metres)
-const DESKTOP_VIEWER_DIST := 5.0  # desktop camera distance behind canvas (metres)
+# Design choices — not measurements of the user or the physical world.
+const CANVAS_VIEW_DIST_M  := 1.5  # how far in front of the camera to place the canvas
+const DESKTOP_VIEWER_DIST := 5.0  # desktop camera distance behind canvas
 
 var _elapsed := 0.0
-var _cp: Node3D   # canvas plane — all position/size info read from here at runtime
+var _cp: Node3D   # canvas plane — position set once from live camera transform
+var _canvas_placed := false  # true after XR canvas has been positioned
 var _shader_tick := 0.0          # accumulator for 20 Hz shader updates
 const SHADER_HZ := 20.0
 var _xr_cam: XRCamera3D
@@ -156,11 +156,13 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# canvas_plane sizes mesh at canvas_width * 0.5 units → scale = 2 * UI_PIXELS_TO_METER
 	# keeps physical_width = canvas_width * UI_PIXELS_TO_METER (Lean: halfW = canvas_width/2/1024 m).
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
-	cp.position = Vector3(0.0, VR_EYE_HEIGHT_M, -CANVAS_VIEW_DIST_M)
+	# XR: canvas position is deferred to _process once tracking delivers a real camera transform.
+	# Desktop: place canvas in front of origin; camera looks at it from behind.
+	if not has_xr:
+		cp.position = Vector3(0.0, 0.0, -CANVAS_VIEW_DIST_M)
 	origin.add_child(cp)
 	_cp = cp
 
-	# Desktop camera: behind canvas by DESKTOP_VIEWER_DIST, looking at canvas centre
 	if not has_xr:
 		var cam := Camera3D.new()
 		cam.name = "Camera3D"
@@ -233,6 +235,14 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	_shader_tick += delta
 	_otel_fade_age += delta
+
+	# Place canvas in front of the camera once XR tracking delivers a real position.
+	# (At origin the camera is (0,0,0) — wait until it moves, indicating active tracking.)
+	if _xr_cam and _cp and not _canvas_placed:
+		var cam_pos := _xr_cam.global_position
+		if cam_pos.length_squared() > 0.01:
+			_cp.global_position = cam_pos + _xr_cam.global_transform.basis * Vector3(0.0, 0.0, -CANVAS_VIEW_DIST_M)
+			_canvas_placed = true
 
 	var ia := _get_active_interaction_action()
 	var tracer = ia.get_parent().get("_tracer") if ia else null
