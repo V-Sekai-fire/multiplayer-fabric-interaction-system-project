@@ -2,16 +2,12 @@ extends Node
 
 const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
-# Scene layout — exported so subclasses / editor can override without touching code.
-# Values must satisfy LassoMapping.lean: centreY = canvas_center_y, centreZ = canvas_center_z,
-# halfW = canvas_width_px / 2 * UI_PIXELS_TO_METER, halfH = canvas_height_px / 2 * UI_PIXELS_TO_METER.
-@export var canvas_width_px:  float = 1280.0
-@export var canvas_height_px: float = 720.0
-@export var canvas_center_y:  float = 1.6    # metres above XROrigin3D
-@export var canvas_center_z:  float = -1.5   # metres in front of XROrigin3D
-@export var desktop_camera_z: float = 3.5    # desktop-mode camera Z (viewer behind canvas)
+# How far behind the canvas the desktop-mode camera sits (metres).
+# Physical meaning: viewer distance. Not derived from canvas config.
+const DESKTOP_VIEWER_DIST := 5.0
 
 var _elapsed := 0.0
+var _cp: Node3D   # canvas plane — all position/size info read from here at runtime
 var _shader_tick := 0.0          # accumulator for 20 Hz shader updates
 const SHADER_HZ := 20.0
 var _xr_cam: XRCamera3D
@@ -116,8 +112,7 @@ func _setup_scene(ulid: String) -> SubViewport:
 
 		_xr_cam = XRCamera3D.new()
 		_xr_cam.name = "XRCamera3D"
-		_xr_cam.position = Vector3(0.0, canvas_center_y, 0.0)
-		origin.add_child(_xr_cam)
+		origin.add_child(_xr_cam)  # XR tracking sets the actual position
 
 		# XR controller tracking nodes (used for sky shader HUD positions)
 		for hand in ["left", "right"]:
@@ -153,23 +148,24 @@ func _setup_scene(ulid: String) -> SubViewport:
 		scene_vp.add_child(node3d)
 		origin = node3d
 
-		# Regular camera looking at the canvas plane from the front
-		var cam := Camera3D.new()
-		cam.name = "Camera3D"
-		cam.position = Vector3(0.0, canvas_center_y, desktop_camera_z)
-		origin.add_child(cam)
-		cam.call_deferred("look_at", Vector3(0.0, canvas_center_y, canvas_center_z))
-
-	# Canvas plane — always present, holds the 2D UI SubViewport
+	# Canvas plane — always present, holds the 2D UI SubViewport.
+	# All subsequent positioning derives from cp.position after it is placed.
 	var cp: Node3D = load("res://addons/canvas_plane/canvas_plane.gd").new()
 	cp.name = "CanvasPlane"
-	cp.set("canvas_width",       canvas_width_px)
-	cp.set("canvas_height",      canvas_height_px)
-	# canvas_plane sizes mesh at canvas_width * 0.5 units, so scale = 2 * UI_PIXELS_TO_METER
-	# to keep physical_width = canvas_width * UI_PIXELS_TO_METER (Lean proof: halfW = 640/1024 m).
+	# canvas_plane sizes mesh at canvas_width * 0.5 units → scale = 2 * UI_PIXELS_TO_METER
+	# keeps physical_width = canvas_width * UI_PIXELS_TO_METER (Lean: halfW = canvas_width/2/1024 m).
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
-	cp.position = Vector3(0.0, canvas_center_y, canvas_center_z)
+	cp.position = Vector3(0.0, 1.6, -1.5)  # eye-level, 1.5 m in front — tune here only
 	origin.add_child(cp)
+	_cp = cp
+
+	# Desktop camera: behind canvas by DESKTOP_VIEWER_DIST, looking at canvas centre
+	if not has_xr:
+		var cam := Camera3D.new()
+		cam.name = "Camera3D"
+		cam.position = cp.position + Vector3(0.0, 0.0, DESKTOP_VIEWER_DIST)
+		origin.add_child(cam)
+		cam.call_deferred("look_at", cp.position)
 
 	if has_xr:
 		var cp_mat := cp.get("material") as StandardMaterial3D
@@ -261,7 +257,7 @@ func _process(delta: float) -> void:
 		var wpos := _xr_cam.global_position
 		_sky_mat.set_shader_parameter("cam_pos", wpos)
 		_sky_mat.set_shader_parameter("dist_to_canvas",
-			wpos.distance_to(Vector3(0.0, canvas_center_y, canvas_center_z)))
+			wpos.distance_to(_cp.global_position) if _cp else 1.5)
 		if _left_ctrl:
 			_sky_mat.set_shader_parameter("left_ctrl_pos",  _left_ctrl.global_position)
 		if _right_ctrl:
