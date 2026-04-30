@@ -77,5 +77,5 @@ func _update_pose(screen_pos: Vector2) -> void:
 	var source_pos := point_on_canvas + cp_xf.basis.z * 0.1
 
 	_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z), source_pos)
-	_tracer.begin_pose(uv, source_pos)
+	_tracer.begin_pose(uv, source_pos, -cp_xf.basis.z)
 	fire_pose_changed(_pose)

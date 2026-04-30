@@ -97,7 +97,7 @@ func on_pose_changed(pose: XRPose):
 
 	if tracer:
 		var ci_type := current_canvas_item.get_class() if current_canvas_item else "null"
-		tracer.record_query_result(true, ci_type, current_pos_2d)
+		tracer.record_query_result(true, ci_type, current_pos_2d, current_target_pos_3d)
 		tracer.end_query()
 
 	interaction_manager.handle_pointer_moved_2d(old_canvas_item, current_canvas_item, current_pos_2d)

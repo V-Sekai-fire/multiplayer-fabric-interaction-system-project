@@ -1,8 +1,16 @@
 extends "./action_host.gd"
 
+const LassoTracer := preload("res://addons/interaction_system/lasso_tracer.gd")
+
 var xr_tracker: XRControllerTracker
+var _tracer: RefCounted
 
 var mb := InputEventMouseButton.new()
+
+
+func _ready() -> void:
+	_tracer = LassoTracer.new()
+	super._ready()
 
 func _xr_tracker_button(button_name: StringName, pressed: bool):
 	mb.resource_name = button_name
@@ -19,9 +27,33 @@ func _xr_tracker_button(button_name: StringName, pressed: bool):
 	#interaction_manager.handle_mouse_button(mb)
 
 func _xr_tracker_pose(pose: XRPose):
+	var xf := pose.transform
+	var aim_dir := -xf.basis.z  # OpenXR: -Z is forward
+
+	# Replace straight-ray source with parabolic endpoint on the canvas plane.
+	var canvas_planes := interaction_manager.canvas_planes if interaction_manager else []
+	if not canvas_planes.is_empty():
+		var cp_xf := canvas_planes[0].global_transform
+		var to_plane := cp_xf.origin - xf.origin
+		var plane_normal := -cp_xf.basis.z  # canvas face normal (toward viewer)
+		var denom := aim_dir.dot(plane_normal)
+		if abs(denom) > 0.001:
+			var t := to_plane.dot(plane_normal) / denom
+			if t > 0.01:
+				var hit := xf.origin + aim_dir * t + Vector3(0.0, -4.9 * t * t, 0.0)
+				var source_pos := hit + cp_xf.basis.z * 0.1
+				var new_pose := XRPose.new()
+				new_pose.name = pose.name
+				new_pose.tracking_confidence = pose.tracking_confidence
+				new_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z), source_pos)
+				pose = new_pose
+
+	if _tracer:
+		_tracer.begin_input("XRPose", Vector2.ZERO)
+		_tracer.begin_pose(Vector2.ZERO, pose.transform.origin, aim_dir)
 	fire_pose_changed(pose)
-	#var xform := pose.transform
-	#interaction_manager.handle_pointer_moved_3d(xform.origin, xform.basis * Vector3(0, 0, -1))
+	if _tracer:
+		_tracer.end_input()
 
 func _xr_pose_lost_tracking(pose: XRPose):
 	fire_tracking_lost()

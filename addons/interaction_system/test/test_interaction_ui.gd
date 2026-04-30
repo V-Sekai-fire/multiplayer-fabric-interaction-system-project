@@ -138,8 +138,17 @@ func _test_lasso_query_returns_poi() -> void:
 	query.source = Transform3D(Basis.looking_at(Vector3(0.0, 0.0, -1.0)), Vector3.ZERO)
 	var found := db.query(query)
 	origin.queue_free()
-	_mark("lasso_query_returns_poi", found and query.out_best_poi != null,
-		"out_best_poi=%s" % str(query.out_best_poi))
+	var poi_json := ""
+	if query.out_best_poi != null:
+		var p := query.out_best_poi
+		poi_json = JSON.stringify({
+			"snapping_power": p.snapping_power,
+			"snapping_enabled": p.snapping_enabled,
+			"size": p.size,
+			"origin_pos": str(p.origin.global_position) if p.origin and p.origin.is_inside_tree() else null,
+			"local": str(query.out_poi_to_local.get(p, Vector3.ZERO)),
+		})
+	_mark("lasso_query_returns_poi", found and query.out_best_poi != null, poi_json)
 
 
 func _test_lasso_query_poi_in_negative_z() -> void:

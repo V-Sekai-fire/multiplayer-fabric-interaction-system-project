@@ -107,20 +107,17 @@ func handle_pointer_moved_2d(last_canvas_item: CanvasItem, new_canvas_item: Canv
 
 			if viewport:
 				viewport.push_input(event, true)
-			if false: # ci != last_canvas_item:
+			if last_canvas_item != new_canvas_item:
 				var last_control := last_canvas_item as Control
 				if last_control != null:
-					#last_control.mouse_exited.emit()
-					last_control.notify_thread_safe(Control.NOTIFICATION_MOUSE_EXIT)
+					last_control.mouse_exited.emit()
 				var new_control := new_canvas_item as Control
 				if new_control != null:
-					#new_control.mouse_entered.emit()
-					new_control.notify_thread_safe(Control.NOTIFICATION_MOUSE_ENTER)
+					new_control.mouse_entered.emit()
 	else:
 		var last_control := last_canvas_item as Control
 		if last_control != null:
-			last_control.notify_thread_safe(Control.NOTIFICATION_MOUSE_EXIT)
-			#last_control.mouse_exited.emit()
+			last_control.mouse_exited.emit()
 
 
 func mouse_motion_to_xform(global_pos: Vector2) -> Transform3D:

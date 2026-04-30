@@ -10,10 +10,25 @@ var _interaction_action: Node
 
 func _ready() -> void:
 	Engine.max_fps = 60
+	_init_otel()
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
 	var ui_vp := _setup_scene(ulid)
 	_setup_2d(ui_vp)
+
+
+func _init_otel() -> void:
+	if not ClassDB.class_exists("OpenTelemetry"):
+		return
+	# Reuse existing node if lasso_tracer already created one this session.
+	if get_node_or_null("OTel") != null:
+		return
+	var otel := OpenTelemetry.new()
+	otel.name = "OTel"
+	var raw: String = ProjectSettings.get_setting("application/config/name", "godot-project")
+	var service_name := raw.to_lower().replace(" ", "-").replace("_", "-")
+	otel.init_tracer_provider("main", "http://localhost:4318", {"service.name": service_name})
+	add_child(otel)
 
 
 func _set_title(ulid: String) -> void:
@@ -82,14 +97,20 @@ func _setup_scene(ulid: String) -> SubViewport:
 		_xr_cam.position = Vector3.UP * 1.6
 		origin.add_child(_xr_cam)
 
-		# XR controller tracking nodes (no action host — DMA is the sole input)
+		# XR controller tracking nodes (used for sky shader HUD positions)
 		for hand in ["left", "right"]:
 			var ctrl := XRController3D.new()
 			ctrl.name = "XRController_" + hand
-			ctrl.tracker = "/" + hand + "_hand/controller"
+			ctrl.tracker = hand + "_hand"
 			origin.add_child(ctrl)
 			if hand == "left":  _left_ctrl  = ctrl
 			else:               _right_ctrl = ctrl
+
+		# Wire XRServer tracker events → xr_action_host → lasso
+		var helper: Node3D = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
+		helper.name = "XRControllerInteractionHelper"
+		helper.set("controller_scene", load("res://addons/interaction_system/example/xr_action_host.tscn"))
+		origin.add_child(helper)
 	else:
 		# Desktop mode: add debug sky so s2h HUD is visible
 		var sky_shader := load("res://debug_sky.gdshader") as Shader
@@ -139,16 +160,17 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# Register canvas (deferred so controls finish layout first)
 	im.call_deferred("register_canvas", cp)
 
-	# Desktop mouse → lasso bridge — always active (sole input source)
-	var dma: Node3D = load("res://desktop_mouse_action.gd").new()
-	dma.name = "DesktopMouseAction"
-	dma.set("interaction_manager", im)
-	dma.set("canvas_plane_node", cp)
-	var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
-	ia.name = "InteractionAction"
-	dma.add_child(ia)
-	add_child(dma)
-	_interaction_action = ia
+	# Desktop mouse → lasso bridge (desktop only; XR uses xr_controller_interaction_helper)
+	if not has_xr:
+		var dma: Node3D = load("res://desktop_mouse_action.gd").new()
+		dma.name = "DesktopMouseAction"
+		dma.set("interaction_manager", im)
+		dma.set("canvas_plane_node", cp)
+		var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
+		ia.name = "InteractionAction"
+		dma.add_child(ia)
+		add_child(dma)
+		_interaction_action = ia
 
 	# XR: show canvas plane texture overlay; Desktop: show full 3D scene with s2h sky
 	if has_xr:

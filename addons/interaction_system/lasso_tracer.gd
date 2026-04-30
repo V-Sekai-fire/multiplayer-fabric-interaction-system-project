@@ -9,26 +9,27 @@ var _root_id  := ""
 var _pose_id  := ""
 var _query_id := ""
 var _enabled  := false
+var spans_flushed: int = 0
 
 
 func _init() -> void:
 	if not ClassDB.class_exists("OpenTelemetry"):
 		return
-	_otel = OpenTelemetry.new()
-	_otel.name = "LassoTracer_OTel"
-	_doc = _otel.get_document()
-	# Add to scene root so _process() runs for non-blocking HTTP sends.
-	var project_name: String = ProjectSettings.get_setting("application/config/name", "godot-project")
-	_otel.init_tracer_provider(
-		"lasso",
-		"http://localhost:4318",
-		{"service.name": project_name}
-	)
-	_enabled = true
-	# add_child deferred — parent tree is busy during _init
 	var tree := Engine.get_main_loop() as SceneTree
-	if tree and tree.root:
-		tree.root.add_child.call_deferred(_otel)
+	# Prefer OTel node already in tree (created by test_main._init_otel).
+	var existing := tree.root.get_node_or_null("OTel") if tree and tree.root else null
+	if existing and existing is OpenTelemetry:
+		_otel = existing as OpenTelemetry
+	else:
+		_otel = OpenTelemetry.new()
+		_otel.name = "LassoTracer_OTel"
+		var raw: String = ProjectSettings.get_setting("application/config/name", "godot-project")
+		var service_name := raw.to_lower().replace(" ", "-").replace("_", "-")
+		_otel.init_tracer_provider("lasso", "http://localhost:4318", {"service.name": service_name})
+		if tree and tree.root:
+			tree.root.add_child.call_deferred(_otel)
+	_doc = _otel.get_document()
+	_enabled = true
 
 
 # ── trace lifecycle ────────────────────────────────────────────────────────
@@ -42,15 +43,18 @@ func begin_input(event_type: String, screen_pos: Vector2) -> void:
 		"screen.y":     screen_pos.y,
 	})
 
-func begin_pose(uv: Vector2, source: Vector3) -> void:
+func begin_pose(uv: Vector2, source: Vector3, aim_dir: Vector3 = Vector3.ZERO) -> void:
 	if not _enabled or _root_id.is_empty():
 		return
 	_pose_id = _otel.start_span_with_parent("lasso.pose", _root_id, 0, [], {
-		"uv.x":      uv.x,
-		"uv.y":      uv.y,
-		"source.x":  source.x,
-		"source.y":  source.y,
-		"source.z":  source.z,
+		"uv.x":       uv.x,
+		"uv.y":       uv.y,
+		"source.x":   source.x,
+		"source.y":   source.y,
+		"source.z":   source.z,
+		"aim.x":      aim_dir.x,
+		"aim.y":      aim_dir.y,
+		"aim.z":      aim_dir.z,
 	})
 
 func end_pose() -> void:
@@ -66,7 +70,7 @@ func begin_query(poi_count: int) -> void:
 		"poi.count": poi_count,
 	})
 
-func record_query_result(found: bool, canvas_item_type: String, pos2d: Vector2) -> void:
+func record_query_result(found: bool, canvas_item_type: String, pos2d: Vector2, target3d: Vector3 = Vector3.ZERO) -> void:
 	if not _enabled or _query_id.is_empty():
 		return
 	_otel.set_attributes(_query_id, {
@@ -74,6 +78,9 @@ func record_query_result(found: bool, canvas_item_type: String, pos2d: Vector2) 
 		"canvas_item.type":   canvas_item_type,
 		"pos2d.x":            pos2d.x,
 		"pos2d.y":            pos2d.y,
+		"target.x":           target3d.x,
+		"target.y":           target3d.y,
+		"target.z":           target3d.z,
 	})
 	_otel.set_status(_query_id, 1 if found else 2, "found" if found else "no_poi")
 
@@ -129,5 +136,6 @@ func end_input(error: String = "") -> void:
 	_otel.end_span(_root_id)
 
 	_otel.flush_all()  # enqueues spans — _process() sends them without blocking
+	spans_flushed += 1
 
 	_root_id = ""
