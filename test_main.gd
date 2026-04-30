@@ -2,9 +2,9 @@ extends Node
 
 const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
-# Design choices — not measurements of the user or the physical world.
-const CANVAS_VIEW_DIST_M  := 1.5  # how far in front of the camera to place the canvas
-const DESKTOP_VIEWER_DIST := 5.0  # desktop camera distance behind canvas
+# XR canvas placement distance — UX preference, not a physical constant.
+# Stored in ProjectSettings so it can be tuned per-application without code changes.
+const CANVAS_VIEW_DIST_SETTING := "xr/canvas/view_distance_m"
 
 var _elapsed := 0.0
 var _cp: Node3D   # canvas plane — position set once from live camera transform
@@ -158,16 +158,19 @@ func _setup_scene(ulid: String) -> SubViewport:
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
 	# XR: canvas position is deferred to _process once tracking delivers a real camera transform.
 	# Desktop: place canvas in front of origin; camera looks at it from behind.
-	if not has_xr:
-		cp.position = Vector3(0.0, 0.0, -CANVAS_VIEW_DIST_M)
 	origin.add_child(cp)
 	_cp = cp
 
 	if not has_xr:
+		# Desktop: derive canvas position and camera distance from camera FOV + canvas height.
 		var cam := Camera3D.new()
 		cam.name = "Camera3D"
-		cam.position = cp.position + Vector3(0.0, 0.0, DESKTOP_VIEWER_DIST)
 		origin.add_child(cam)
+		var canvas_half_h: float = cp.get("canvas_height") * CanvasUtils.UI_PIXELS_TO_METER * 0.5
+		# Distance so full canvas height fits within vertical FOV with no margin clipping.
+		var viewer_dist := canvas_half_h / tan(deg_to_rad(cam.fov) * 0.5)
+		cp.position = Vector3(0.0, 0.0, -viewer_dist * 0.5)  # canvas halfway between origin and camera
+		cam.position = cp.position + Vector3(0.0, 0.0, viewer_dist)
 		cam.call_deferred("look_at", cp.position)
 
 	if has_xr:
@@ -241,7 +244,8 @@ func _process(delta: float) -> void:
 	if _xr_cam and _cp and not _canvas_placed:
 		var cam_pos := _xr_cam.global_position
 		if cam_pos.length_squared() > 0.01:
-			_cp.global_position = cam_pos + _xr_cam.global_transform.basis * Vector3(0.0, 0.0, -CANVAS_VIEW_DIST_M)
+			var view_dist: float = ProjectSettings.get_setting(CANVAS_VIEW_DIST_SETTING, 1.5)
+			_cp.global_position = cam_pos + _xr_cam.global_transform.basis * Vector3(0.0, 0.0, -view_dist)
 			_canvas_placed = true
 
 	var ia := _get_active_interaction_action()
