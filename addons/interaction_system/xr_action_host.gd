@@ -28,7 +28,7 @@ func _xr_tracker_button(button_name: StringName, pressed: bool):
 
 func _xr_tracker_pose(pose: XRPose):
 	var xf := pose.transform
-	var aim_dir := -xf.basis.z  # OpenXR: -Z is forward
+	var aim_dir := -xf.basis.z.normalized()  # OpenXR: -Z is forward
 
 	# Replace straight-ray source with parabolic endpoint on the canvas plane.
 	# t_dist is meters along the ray; convert to time via CURVE_SPEED so gravity
@@ -39,18 +39,18 @@ func _xr_tracker_pose(pose: XRPose):
 	if not canvas_planes.is_empty():
 		var cp_xf := canvas_planes[0].global_transform
 		var to_plane := cp_xf.origin - xf.origin
-		var plane_normal := -cp_xf.basis.z  # canvas face normal (toward viewer)
+		var plane_normal := -cp_xf.basis.z.normalized()  # canvas face normal (toward viewer)
 		var denom := aim_dir.dot(plane_normal)
 		if abs(denom) > 0.001:
 			var t_dist := to_plane.dot(plane_normal) / denom
 			if t_dist > 0.01:
 				var t_sec := t_dist / CURVE_SPEED
 				var hit := xf.origin + aim_dir * t_dist + Vector3(0.0, -HALF_GRAVITY * t_sec * t_sec, 0.0)
-				var source_pos := hit + cp_xf.basis.z * 0.1
+				var source_pos := hit + cp_xf.basis.z.normalized() * 0.1
 				var new_pose := XRPose.new()
 				new_pose.name = pose.name
 				new_pose.tracking_confidence = pose.tracking_confidence
-				new_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z), source_pos)
+				new_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z.normalized()), source_pos)
 				pose = new_pose
 
 	if _tracer:

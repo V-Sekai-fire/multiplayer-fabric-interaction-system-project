@@ -9,7 +9,7 @@ extends "./base_action.gd"
 var current_poi: LassoPoint
 var current_snap_node: Node
 var current_canvas_item: CanvasItem
-var current_canvas_plane  # canvas_plane_class
+var current_canvas_plane: CanvasPlane
 var current_pos_2d: Vector2
 var current_target_pos_3d: Vector3
 var pressed_buttons: Dictionary[StringName, bool]

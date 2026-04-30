@@ -18,6 +18,10 @@ var _sky_mat: ShaderMaterial
 var _left_ctrl: XRController3D
 var _right_ctrl: XRController3D
 var _interaction_action: Node
+var _helper: Node3D
+var _cp_anchors: Array[Node3D] = []
+var _otel_chars  := PackedInt32Array()
+var _otel_counts := PackedInt32Array()
 # OTel span persistence — ring buffer, only oldest slot fades
 const OTEL_N      := 8    # history depth
 const OTEL_CLEN   := 20   # max chars per span name + tag
@@ -29,6 +33,8 @@ var _otel_fade_age    := 0.0
 
 func _ready() -> void:
 	Engine.max_fps = 60
+	_otel_chars.resize(OTEL_N * OTEL_CLEN)
+	_otel_counts.resize(OTEL_N)
 	_init_otel()
 	var ulid := _gen_ulid()
 	call_deferred("_set_title", ulid)
@@ -127,10 +133,10 @@ func _setup_scene(ulid: String) -> SubViewport:
 			else:               _right_ctrl = ctrl
 
 		# Wire XRServer tracker events → xr_action_host → lasso
-		var helper: Node3D = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
-		helper.name = "XRControllerInteractionHelper"
-		helper.set("controller_scene", load("res://addons/interaction_system/example/xr_action_host.tscn"))
-		origin.add_child(helper)
+		_helper = load("res://addons/interaction_system/xr_controller_interaction_helper.gd").new()
+		_helper.name = "XRControllerInteractionHelper"
+		_helper.set("controller_scene", load("res://addons/interaction_system/example/xr_action_host.tscn"))
+		origin.add_child(_helper)
 	else:
 		# Desktop mode: add debug sky so s2h HUD is visible
 		var sky_shader := load("res://debug_sky.gdshader") as Shader
@@ -205,16 +211,15 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# In XR mode the XR controller drives pose; DMA adds a second input path for
 	# mouse clicks directly in the Godot window (the OS routes clicks to the focused
 	# Godot window regardless of whether the XR simulator is running).
-	if true:
-		var dma: Node3D = load("res://desktop_mouse_action.gd").new()
-		dma.name = "DesktopMouseAction"
-		dma.set("interaction_manager", im)
-		dma.set("canvas_plane_node", cp)
-		var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
-		ia.name = "InteractionAction"
-		dma.add_child(ia)
-		add_child(dma)
-		_interaction_action = ia
+	var dma: Node3D = load("res://desktop_mouse_action.gd").new()
+	dma.name = "DesktopMouseAction"
+	dma.set("interaction_manager", im)
+	dma.set("canvas_plane_node", cp)
+	var ia: Node3D = load("res://addons/interaction_system/controller_actions/interaction_action.gd").new()
+	ia.name = "InteractionAction"
+	dma.add_child(ia)
+	add_child(dma)
+	_interaction_action = ia
 
 	# XR: show canvas plane texture overlay; Desktop: show full 3D scene with s2h sky
 	if has_xr:
@@ -276,11 +281,13 @@ func _init_debug_labels() -> void:
 	for i in actions.size():
 		_dbg_lasso_labels.append(_make_debug_label("lasso→", ctrl_colors[i % ctrl_colors.size()]))
 		_dbg_src_labels.append(  _make_debug_label("src→",   src_colors[i  % src_colors.size()]))
-	# One label per canvas_3d_anchor = button centre
+	# One label per canvas_3d_anchor = button centre; cache anchor refs for _update_debug_labels
 	for anchor in _cp.find_children("*", "Canvas3DAnchor", true, false):
-		var path: String = str((anchor as Node3D).get("canvas_item_node_path"))
+		var anchor3d := anchor as Node3D
+		var path: String = str(anchor3d.get("canvas_item_node_path"))
 		var lbl := _make_debug_label("btn:" + path.get_file(), Color.LIME_GREEN)
 		_dbg_poi_labels.append(lbl)
+		_cp_anchors.append(anchor3d)
 	_dbg_ready = true
 
 
@@ -310,9 +317,8 @@ func _get_all_interaction_actions() -> Array:
 		return [_interaction_action]
 	# XR mode: one InteractionAction per xr_action_host (= per controller)
 	var result := []
-	var helper := get_node_or_null("/root/TestMain/SceneViewport/XROrigin3D/XRControllerInteractionHelper")
-	if helper:
-		for host in helper.get_children():
+	if _helper:
+		for host in _helper.get_children():
 			var ia := host.get_node_or_null("InteractionAction")
 			if ia:
 				result.append(ia)
@@ -323,9 +329,8 @@ func _update_debug_labels() -> void:
 	# Godot: Y-up right-handed, forward = -Z, Euler order YXZ.
 	# basis.z = local +Z; -basis.z = forward (into the scene).
 	# Button centres: canvas_3d_anchor updates its transform in _process each frame.
-	var anchors := _cp.find_children("*", "Canvas3DAnchor", true, false)
-	for i in min(anchors.size(), _dbg_poi_labels.size()):
-		var anchor := anchors[i] as Node3D
+	for i in min(_cp_anchors.size(), _dbg_poi_labels.size()):
+		var anchor := _cp_anchors[i]
 		var pos    := anchor.global_position
 		var normal := -anchor.global_transform.basis.z  # -Z = forward/toward-viewer
 		_dbg_poi_labels[i].global_position = pos + normal * 0.02
@@ -336,8 +341,10 @@ func _update_debug_labels() -> void:
 	var actions := _get_all_interaction_actions()
 	for i in min(actions.size(), _dbg_lasso_labels.size()):
 		var ia: Node = actions[i]
-		var tgt: Vector3  = ia.get("current_target_pos_3d") if ia.get("current_target_pos_3d") != null else Vector3.ZERO
-		var src_xf: Transform3D = ia.get("transform") if ia.get("transform") != null else Transform3D()
+		var _t = ia.get("current_target_pos_3d")
+		var tgt: Vector3 = _t if _t != null else Vector3.ZERO
+		var _x = ia.get("transform")
+		var src_xf: Transform3D = _x if _x != null else Transform3D()
 		var src_pos := src_xf.origin
 		var src_dir := -src_xf.basis.z  # forward of source frame
 		_dbg_lasso_labels[i].global_position = tgt + Vector3(0.0, 0.06 * (i + 1), 0.0)
@@ -397,22 +404,22 @@ func _process(delta: float) -> void:
 
 	if ia:
 		_sky_mat.set_shader_parameter("lasso_found",     1 if ia.get("lasso_found") else 0)
-		_sky_mat.set_shader_parameter("lasso_poi_count", ia.get("lasso_poi_count") if ia.get("lasso_poi_count") != null else 0)
-		_sky_mat.set_shader_parameter("lasso_eucl_dist", ia.get("lasso_eucl_dist") if ia.get("lasso_eucl_dist") != null else 0.0)
-		_sky_mat.set_shader_parameter("lasso_ang_dist",  ia.get("lasso_ang_dist") if ia.get("lasso_ang_dist") != null else 0.0)
+		_sky_mat.set_shader_parameter("lasso_poi_count", ia.get("lasso_poi_count") as int)
+		_sky_mat.set_shader_parameter("lasso_eucl_dist", ia.get("lasso_eucl_dist") as float)
+		_sky_mat.set_shader_parameter("lasso_ang_dist",  ia.get("lasso_ang_dist") as float)
 
 	# Encode string history as flat int[OTEL_N * OTEL_CLEN] ASCII char codes
-	var chars := PackedInt32Array(); chars.resize(OTEL_N * OTEL_CLEN)
-	var counts := PackedInt32Array(); counts.resize(OTEL_N)
+	_otel_chars.fill(0)
+	_otel_counts.fill(0)
 	for i in _otel_hist_spans.size():
 		var s: String = _otel_hist_spans[i]
-		counts[i] = _otel_hist_counts[i]
+		_otel_counts[i] = _otel_hist_counts[i]
 		for j in min(s.length(), OTEL_CLEN):
-			chars[i * OTEL_CLEN + j] = s.unicode_at(j)
+			_otel_chars[i * OTEL_CLEN + j] = s.unicode_at(j)
 	_sky_mat.set_shader_parameter("otel_span_n",      _otel_span_n)
 	_sky_mat.set_shader_parameter("otel_fade_age",    _otel_fade_age)
-	_sky_mat.set_shader_parameter("otel_hist_chars",  chars)
-	_sky_mat.set_shader_parameter("otel_hist_counts", counts)
+	_sky_mat.set_shader_parameter("otel_hist_chars",  _otel_chars)
+	_sky_mat.set_shader_parameter("otel_hist_counts", _otel_counts)
 
 
 func _push_otel_str(label: String) -> void:

@@ -79,8 +79,11 @@ func begin_query(poi_count: int) -> void:
 
 func record_query_result(found: bool, canvas_item_type: String, pos2d: Vector2, target3d: Vector3 = Vector3.ZERO) -> void:
 	queries_total += 1
-	if found: queries_found += 1
-	last_span = &"lasso.query"; last_status = 0; last_tag = &"found" if found else &"miss"
+	if found:
+		queries_found += 1
+	last_span = &"lasso.query"
+	last_status = 0
+	last_tag = &"found" if found else &"miss"
 	if not _enabled or _query_id.is_empty():
 		return
 	_otel.set_attributes(_query_id, {
@@ -100,29 +103,11 @@ func end_query() -> void:
 	_otel.end_span(_query_id)
 	_query_id = ""
 
-func record_poi_positions(poi_set: Dictionary) -> void:
-	if not _enabled or _query_id.is_empty():
-		return
-	var i := 0
-	for poi in poi_set:
-		if i >= 7:
-			break
-		var origin: Node3D = poi.origin
-		if origin and origin.is_inside_tree():
-			var gp: Vector3 = origin.global_position
-			var ci = poi.canvas_item if "canvas_item" in poi else null
-			var ci_name: String = ci.get_class() if ci else "unknown"
-			_otel.set_attributes(_query_id, {
-				"poi.%d.control" % i: ci_name,
-				"poi.%d.x" % i: gp.x,
-				"poi.%d.y" % i: gp.y,
-				"poi.%d.z" % i: gp.z,
-			})
-		i += 1
-
 func record_dispatch(action: String, canvas_item_type: String, pos2d: Vector2) -> void:
 	dispatches_ok += 1
-	last_span = &"lasso.dispatch"; last_status = 0; last_tag = &"press" if action == "press" else &"release"
+	last_span = &"lasso.dispatch"
+	last_status = 0
+	last_tag = &"press" if action == "press" else &"release"
 	if not _enabled or _root_id.is_empty():
 		return
 	var span := _otel.start_span_with_parent("lasso.dispatch", _root_id, 0, [], {

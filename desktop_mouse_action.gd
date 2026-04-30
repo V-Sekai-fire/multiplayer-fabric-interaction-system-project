@@ -74,8 +74,9 @@ func _update_pose(screen_pos: Vector2) -> void:
 
 	var cp_xf := canvas_plane_node.global_transform
 	var point_on_canvas := cp_xf.origin + cp_xf.basis.x * x3 + cp_xf.basis.y * y3
-	var source_pos := point_on_canvas + cp_xf.basis.z * 0.1
+	var source_pos := point_on_canvas + cp_xf.basis.z.normalized() * 0.1
 
-	_pose.transform = Transform3D(Basis.looking_at(-cp_xf.basis.z), source_pos)
-	_tracer.begin_pose(uv, source_pos, -cp_xf.basis.z)
+	var canvas_normal := -cp_xf.basis.z.normalized()
+	_pose.transform = Transform3D(Basis.looking_at(canvas_normal), source_pos)
+	_tracer.begin_pose(uv, source_pos, canvas_normal)
 	fire_pose_changed(_pose)
