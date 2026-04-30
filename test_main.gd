@@ -157,6 +157,10 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# canvas_plane sizes mesh at canvas_width * 0.5 units → scale = 2 * UI_PIXELS_TO_METER
 	# keeps physical_width = canvas_width * UI_PIXELS_TO_METER (Lean: halfW = canvas_width/2/1024 m).
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
+	# canvas_anchor_x/y must equal Canvas3D.offset_ratio.x/y (both default 0.5)
+	# so the mesh pivot and anchor coordinate origin agree.
+	cp.set("canvas_anchor_x", 0.5)
+	cp.set("canvas_anchor_y", 0.5)
 	# XR: canvas position is deferred to _process once tracking delivers a real camera transform.
 	# Desktop: place canvas in front of origin; camera looks at it from behind.
 	# World position: scene design decision — canvas is a fixed object in the room.
