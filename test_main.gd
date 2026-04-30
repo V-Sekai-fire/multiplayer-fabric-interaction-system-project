@@ -2,9 +2,10 @@ extends Node
 
 const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
-# How far behind the canvas the desktop-mode camera sits (metres).
-# Physical meaning: viewer distance. Not derived from canvas config.
-const DESKTOP_VIEWER_DIST := 5.0
+# Physical scene constants — independent of canvas configuration.
+const VR_EYE_HEIGHT_M     := 1.6  # standard standing eye height in VR (metres)
+const CANVAS_VIEW_DIST_M  := 1.5  # comfortable canvas-to-user viewing distance (metres)
+const DESKTOP_VIEWER_DIST := 5.0  # desktop camera distance behind canvas (metres)
 
 var _elapsed := 0.0
 var _cp: Node3D   # canvas plane — all position/size info read from here at runtime
@@ -155,7 +156,7 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# canvas_plane sizes mesh at canvas_width * 0.5 units → scale = 2 * UI_PIXELS_TO_METER
 	# keeps physical_width = canvas_width * UI_PIXELS_TO_METER (Lean: halfW = canvas_width/2/1024 m).
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
-	cp.position = Vector3(0.0, 1.6, -1.5)  # eye-level, 1.5 m in front — tune here only
+	cp.position = Vector3(0.0, VR_EYE_HEIGHT_M, -CANVAS_VIEW_DIST_M)
 	origin.add_child(cp)
 	_cp = cp
 
