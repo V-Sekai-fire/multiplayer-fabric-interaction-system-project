@@ -2,13 +2,9 @@ extends Node
 
 const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
-# XR canvas placement distance — UX preference, not a physical constant.
-# Stored in ProjectSettings so it can be tuned per-application without code changes.
-const CANVAS_VIEW_DIST_SETTING := "xr/canvas/view_distance_m"
 
 var _elapsed := 0.0
-var _cp: Node3D   # canvas plane — position set once from live camera transform
-var _canvas_placed := false  # true after XR canvas has been positioned
+var _cp: Node3D   # canvas plane — world-space position set at scene design time
 var _shader_tick := 0.0          # accumulator for 20 Hz shader updates
 const SHADER_HZ := 20.0
 var _xr_cam: XRCamera3D
@@ -158,6 +154,9 @@ func _setup_scene(ulid: String) -> SubViewport:
 	cp.set("canvas_plane_scale", 2.0 * CanvasUtils.UI_PIXELS_TO_METER)
 	# XR: canvas position is deferred to _process once tracking delivers a real camera transform.
 	# Desktop: place canvas in front of origin; camera looks at it from behind.
+	# World position: scene design decision — canvas is a fixed object in the room.
+	# In XR this is relative to XROrigin3D (floor centre). In desktop, _setup_cam overrides.
+	cp.position = Vector3(0.0, 1.0, -1.5)
 	origin.add_child(cp)
 	_cp = cp
 
@@ -238,15 +237,6 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	_shader_tick += delta
 	_otel_fade_age += delta
-
-	# Place canvas in front of the camera once XR tracking delivers a real position.
-	# (At origin the camera is (0,0,0) — wait until it moves, indicating active tracking.)
-	if _xr_cam and _cp and not _canvas_placed:
-		var cam_pos := _xr_cam.global_position
-		if cam_pos.length_squared() > 0.01:
-			var view_dist: float = ProjectSettings.get_setting(CANVAS_VIEW_DIST_SETTING, 1.5)
-			_cp.global_position = cam_pos + _xr_cam.global_transform.basis * Vector3(0.0, 0.0, -view_dist)
-			_canvas_placed = true
 
 	var ia := _get_active_interaction_action()
 	var tracer = ia.get_parent().get("_tracer") if ia else null
