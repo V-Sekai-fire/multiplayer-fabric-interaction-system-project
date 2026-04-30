@@ -4,7 +4,8 @@ const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
 
 var _elapsed := 0.0
-var _cp: Node3D   # canvas plane — world-space position set at scene design time
+var _cp: Node3D      # canvas plane — world-space position set at scene design time
+var _origin: Node3D  # XROrigin3D or SceneRoot — parent of canvas + camera
 # Debug labels — one set per controller + one per button centre
 var _dbg_lasso_labels: Array[Label3D] = []   # indexed by controller slot
 var _dbg_src_labels:   Array[Label3D] = []
@@ -168,6 +169,7 @@ func _setup_scene(ulid: String) -> SubViewport:
 	cp.position = Vector3(0.0, 1.0, -1.5)
 	origin.add_child(cp)
 	_cp = cp
+	_origin = origin
 
 	if not has_xr:
 		# Desktop: derive canvas position and camera distance from camera FOV + canvas height.
@@ -194,6 +196,11 @@ func _setup_scene(ulid: String) -> SubViewport:
 	# Register canvas (deferred so controls finish layout first)
 	im.call_deferred("register_canvas", cp)
 
+	# AnimationPlayer: vary canvas position to stress-test lasso tracking.
+	# DMA and canvas_3d_anchor both read global_transform each frame, so they
+	# should track the moving canvas correctly. Verifies no hardcoded positions remain.
+	call_deferred("_start_canvas_animation")
+
 	# Desktop mouse → lasso bridge — always active.
 	# In XR mode the XR controller drives pose; DMA adds a second input path for
 	# mouse clicks directly in the Godot window (the OS routes clicks to the focused
@@ -214,6 +221,37 @@ func _setup_scene(ulid: String) -> SubViewport:
 		return cp.call("get_control_viewport") as SubViewport
 	else:
 		return scene_vp
+
+
+func _start_canvas_animation() -> void:
+	if _origin == null or _cp == null:
+		return
+	var player := AnimationPlayer.new()
+	player.name = "CanvasAnimPlayer"
+	_origin.add_child(player)
+
+	var anim := Animation.new()
+	anim.loop_mode = Animation.LOOP_LINEAR
+	anim.length = 6.0  # 6-second cycle
+
+	# Vary canvas Y: 0.5 m (kneeling) → 1.5 m (standing) → back
+	var ty := anim.add_track(Animation.TYPE_VALUE)
+	anim.track_set_path(ty, NodePath("CanvasPlane:position:y"))
+	anim.track_insert_key(ty, 0.0, _cp.position.y - 0.5)
+	anim.track_insert_key(ty, 3.0, _cp.position.y + 0.5)
+	anim.track_insert_key(ty, 6.0, _cp.position.y - 0.5)
+
+	# Vary canvas Z: 1.0 m closer → 1.0 m further → back
+	var tz := anim.add_track(Animation.TYPE_VALUE)
+	anim.track_set_path(tz, NodePath("CanvasPlane:position:z"))
+	anim.track_insert_key(tz, 0.0, _cp.position.z + 1.0)
+	anim.track_insert_key(tz, 3.0, _cp.position.z - 1.0)
+	anim.track_insert_key(tz, 6.0, _cp.position.z + 1.0)
+
+	var lib := AnimationLibrary.new()
+	lib.add_animation(&"vary_canvas", anim)
+	player.add_animation_library(&"", lib)
+	player.play("vary_canvas")
 
 
 func _make_debug_label(text: String, color: Color) -> Label3D:
