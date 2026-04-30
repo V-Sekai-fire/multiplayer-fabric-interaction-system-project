@@ -5,6 +5,11 @@ const CanvasUtils := preload("res://addons/canvas_plane/canvas_utils.gd")
 
 var _elapsed := 0.0
 var _cp: Node3D   # canvas plane — world-space position set at scene design time
+# Debug labels — one set per controller + one per button centre
+var _dbg_lasso_labels: Array[Label3D] = []   # indexed by controller slot
+var _dbg_src_labels:   Array[Label3D] = []
+var _dbg_poi_labels:   Array[Label3D] = []
+var _dbg_ready := false
 var _shader_tick := 0.0          # accumulator for 20 Hz shader updates
 const SHADER_HZ := 20.0
 var _xr_cam: XRCamera3D
@@ -204,6 +209,36 @@ func _setup_scene(ulid: String) -> SubViewport:
 		return scene_vp
 
 
+func _make_debug_label(text: String, color: Color) -> Label3D:
+	var lbl := Label3D.new()
+	lbl.text = text
+	lbl.modulate = color
+	lbl.outline_modulate = Color.BLACK
+	lbl.outline_size = 4
+	lbl.font_size = 14
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	lbl.pixel_size = 0.002
+	_cp.get_parent().add_child(lbl)
+	return lbl
+
+
+func _init_debug_labels() -> void:
+	# One lasso-endpoint + source pair per controller
+	var ctrl_colors := [Color.ORANGE, Color.YELLOW, Color.PINK, Color.MAGENTA]
+	var src_colors  := [Color.CYAN,   Color.AQUA,   Color.WHITE, Color.LIGHT_BLUE]
+	var actions := _get_all_interaction_actions()
+	for i in actions.size():
+		_dbg_lasso_labels.append(_make_debug_label("lasso→", ctrl_colors[i % ctrl_colors.size()]))
+		_dbg_src_labels.append(  _make_debug_label("src→",   src_colors[i  % src_colors.size()]))
+	# One label per canvas_3d_anchor = button centre
+	for anchor in _cp.find_children("*", "Canvas3DAnchor", true, false):
+		var path: String = str((anchor as Node3D).get("canvas_item_node_path"))
+		var lbl := _make_debug_label("btn:" + path.get_file(), Color.LIME_GREEN)
+		_dbg_poi_labels.append(lbl)
+	_dbg_ready = true
+
+
 # Display the canvas plane's SubViewport as a 2D texture overlay on the main window.
 func _setup_2d(ui_vp: SubViewport) -> void:
 	if ui_vp == null:
@@ -221,22 +256,64 @@ func _setup_2d(ui_vp: SubViewport) -> void:
 
 
 func _get_active_interaction_action() -> Node:
+	var all := _get_all_interaction_actions()
+	return all[0] if not all.is_empty() else null
+
+
+func _get_all_interaction_actions() -> Array:
 	if _interaction_action:
-		return _interaction_action
-	# XR mode: find first interaction_action under any xr_action_host child
+		return [_interaction_action]
+	# XR mode: one InteractionAction per xr_action_host (= per controller)
+	var result := []
 	var helper := get_node_or_null("/root/TestMain/SceneViewport/XROrigin3D/XRControllerInteractionHelper")
 	if helper:
 		for host in helper.get_children():
 			var ia := host.get_node_or_null("InteractionAction")
 			if ia:
-				return ia
-	return null
+				result.append(ia)
+	return result
+
+
+func _update_debug_labels() -> void:
+	# Godot: Y-up right-handed, forward = -Z, Euler order YXZ.
+	# basis.z = local +Z; -basis.z = forward (into the scene).
+	# Button centres: canvas_3d_anchor updates its transform in _process each frame.
+	var anchors := _cp.find_children("*", "Canvas3DAnchor", true, false)
+	for i in min(anchors.size(), _dbg_poi_labels.size()):
+		var anchor := anchors[i] as Node3D
+		var pos    := anchor.global_position
+		var normal := -anchor.global_transform.basis.z  # -Z = forward/toward-viewer
+		_dbg_poi_labels[i].global_position = pos + normal * 0.02
+		_dbg_poi_labels[i].text = "btn\n(%.2f, %.2f, %.2f)\ndir (%.2f, %.2f, %.2f)" % [
+			pos.x, pos.y, pos.z, normal.x, normal.y, normal.z]
+
+	# One lasso endpoint + source label per controller.
+	var actions := _get_all_interaction_actions()
+	for i in min(actions.size(), _dbg_lasso_labels.size()):
+		var ia: Node = actions[i]
+		var tgt: Vector3  = ia.get("current_target_pos_3d") if ia.get("current_target_pos_3d") != null else Vector3.ZERO
+		var src_xf: Transform3D = ia.get("transform") if ia.get("transform") != null else Transform3D()
+		var src_pos := src_xf.origin
+		var src_dir := -src_xf.basis.z  # forward of source frame
+		_dbg_lasso_labels[i].global_position = tgt + Vector3(0.0, 0.06 * (i + 1), 0.0)
+		_dbg_lasso_labels[i].text = "lasso[%d]→\n(%.2f, %.2f, %.2f)" % [i, tgt.x, tgt.y, tgt.z]
+		_dbg_src_labels[i].global_position = src_pos + Vector3(0.0, 0.06 * (i + 1), 0.0)
+		_dbg_src_labels[i].text = "src[%d]\n(%.2f, %.2f, %.2f)\ndir (%.2f, %.2f, %.2f)" % [
+			i, src_pos.x, src_pos.y, src_pos.z, src_dir.x, src_dir.y, src_dir.z]
 
 
 func _process(delta: float) -> void:
 	_elapsed += delta
 	_shader_tick += delta
 	_otel_fade_age += delta
+
+	# Initialise debug labels once canvas anchors are laid out (deferred after register_canvas).
+	if _cp and not _dbg_ready and _cp.get_child_count() > 2:
+		_init_debug_labels()
+
+	# Update debug labels every frame.
+	if _dbg_ready:
+		_update_debug_labels()
 
 	var ia := _get_active_interaction_action()
 	var tracer = ia.get_parent().get("_tracer") if ia else null
